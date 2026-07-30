@@ -1,0 +1,164 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// NOTA: SQLite no soporta enums nativos en Prisma, por eso los "enums" de este
+// dominio (Rol, Unidad, TipoMovimiento, etc.) se modelan como String y se
+// validan en la capa de aplicación (ver src/constants.ts y los esquemas zod).
+
+model Usuario {
+  id           Int      @id @default(autoincrement())
+  nombre       String
+  email        String   @unique
+  passwordHash String
+  rol          String   @default("CAJERO") // ADMIN | CAJERO
+  activo       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  ventas       Venta[]
+  movimientos  MovimientoInventario[]
+}
+
+model Categoria {
+  id        Int        @id @default(autoincrement())
+  nombre    String     @unique
+  productos Producto[]
+}
+
+model Producto {
+  id            Int      @id @default(autoincrement())
+  codigoBarras  String?  @unique
+  nombre        String
+  descripcion   String?
+  categoriaId   Int?
+  categoria     Categoria? @relation(fields: [categoriaId], references: [id])
+  // Unidad de venta: UNIDAD | PAQUETE | CAJA | KILOGRAMO | GRAMO | LIBRA | LITRO
+  // Importante para una salsamentaria: se vende tanto por unidad suelta como por caja/paquete mayor.
+  unidad        String   @default("UNIDAD")
+  precioCosto   Float    @default(0)
+  precioVenta   Float
+  // Tasa de IVA aplicable en Colombia: 0 (excluido/exento), 5 o 19.
+  // Muchos productos de una salsamentaria (alimentos de la canasta básica) están excluidos o al 5%.
+  ivaTasa       Int      @default(0)
+  stock         Float    @default(0)
+  stockMinimo   Float    @default(0)
+  activo        Boolean  @default(true)
+  imagenUrl     String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  movimientos   MovimientoInventario[]
+  ventaItems    VentaItem[]
+
+  @@index([nombre])
+}
+
+model MovimientoInventario {
+  id            Int      @id @default(autoincrement())
+  productoId    Int
+  producto      Producto @relation(fields: [productoId], references: [id])
+  // ENTRADA (compra) | SALIDA (merma/daño) | AJUSTE (conteo físico) | VENTA (automático) | DEVOLUCION
+  tipo          String
+  cantidad      Float
+  costoUnitario Float?
+  motivo        String?
+  usuarioId     Int?
+  usuario       Usuario? @relation(fields: [usuarioId], references: [id])
+  ventaId       Int?
+  venta         Venta?   @relation(fields: [ventaId], references: [id])
+  createdAt     DateTime @default(now())
+
+  @@index([productoId])
+  @@index([createdAt])
+}
+
+model Cliente {
+  id                Int      @id @default(autoincrement())
+  tipoDocumento     String   @default("CC") // CC | NIT | CE | PASAPORTE
+  numeroDocumento   String   @default("222222222222")
+  nombre            String   @default("Consumidor Final")
+  telefono          String?
+  email             String?
+  direccion         String?
+  esConsumidorFinal Boolean  @default(true)
+  createdAt         DateTime @default(now())
+
+  ventas            Venta[]
+
+  @@unique([tipoDocumento, numeroDocumento])
+}
+
+model Venta {
+  id                Int      @id @default(autoincrement())
+  numero            Int
+  prefijo           String   @default("POS")
+  clienteId         Int?
+  cliente           Cliente? @relation(fields: [clienteId], references: [id])
+  usuarioId         Int
+  usuario           Usuario  @relation(fields: [usuarioId], references: [id])
+  subtotal          Float
+  descuento         Float    @default(0)
+  ivaTotal          Float    @default(0)
+  total             Float
+  metodoPago        String   @default("EFECTIVO") // EFECTIVO | TARJETA | TRANSFERENCIA | MIXTO
+  efectivoRecibido  Float?
+  cambio            Float?
+  estado            String   @default("COMPLETADA") // COMPLETADA | ANULADA
+  // DOCUMENTO_POS: documento equivalente POS (válido para ventas de poco valor sin factura electrónica).
+  // FACTURA_ELECTRONICA: factura electrónica de venta ante la DIAN (requiere proveedor tecnológico habilitado).
+  tipoDocumento     String   @default("DOCUMENTO_POS")
+  // Campos que solo se llenan si se emitió factura electrónica vía proveedor DIAN
+  cufe              String?
+  urlQr             String?
+  proveedorFactura  String?
+  motivoAnulacion   String?
+  createdAt         DateTime @default(now())
+
+  items             VentaItem[]
+  movimientos       MovimientoInventario[]
+
+  @@unique([prefijo, numero])
+  @@index([createdAt])
+}
+
+model VentaItem {
+  id              Int      @id @default(autoincrement())
+  ventaId         Int
+  venta           Venta    @relation(fields: [ventaId], references: [id])
+  productoId      Int
+  producto        Producto @relation(fields: [productoId], references: [id])
+  nombreProducto  String
+  cantidad        Float
+  precioUnitario  Float
+  ivaTasa         Int      @default(0)
+  descuento       Float    @default(0)
+  subtotal        Float
+}
+
+// Configuración global de la tienda (singleton, siempre id = 1)
+model Configuracion {
+  id                                Int       @id @default(1)
+  nombreNegocio                     String    @default("San Miguel")
+  nit                               String?
+  direccion                         String    @default("Cra 43 con Calle 8, Mercado de Barranquilla")
+  telefono                          String?
+  ciudad                            String    @default("Barranquilla")
+  // Resolución de numeración de facturación DIAN (Resolución de Facturación vigente)
+  resolucionDianNumero              String?
+  resolucionDianPrefijo             String?
+  resolucionDianDesde               Int?
+  resolucionDianHasta               Int?
+  resolucionDianVigenciaDesde       DateTime?
+  resolucionDianVigenciaHasta       DateTime?
+  facturacionElectronicaHabilitada  Boolean   @default(false)
+  proveedorFacturacion              String    @default("NINGUNO") // NINGUNO | FACTUS
+  proveedorApiUrl                   String?
+  proveedorApiKey                   String?
+  proveedorApiSecret                String?
+  formatoRecibo                     String    @default("80MM") // 58MM | 80MM
+}
