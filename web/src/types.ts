@@ -36,6 +36,7 @@ export interface Producto {
   unidad: Unidad;
   precioCosto: number;
   precioVenta: number;
+  precioMayorista: number | null;
   ivaTasa: number;
   stock: number;
   stockMinimo: number;
@@ -59,6 +60,7 @@ export interface MovimientoInventario {
 }
 
 export type TipoDocumentoCliente = "CC" | "NIT" | "CE" | "PASAPORTE";
+export type TipoCliente = "DETAL" | "MAYORISTA";
 
 export interface Cliente {
   id: number;
@@ -69,22 +71,57 @@ export interface Cliente {
   email: string | null;
   direccion: string | null;
   esConsumidorFinal: boolean;
+  tipoCliente: TipoCliente;
+  limiteCredito: number;
+  saldoPendiente: number;
+  diasPlazoCredito: number;
 }
 
-export type MetodoPago = "EFECTIVO" | "TARJETA" | "TRANSFERENCIA" | "MIXTO";
+export type MetodoPago = "EFECTIVO" | "TARJETA" | "TRANSFERENCIA" | "MIXTO" | "CREDITO";
 export type EstadoVenta = "COMPLETADA" | "ANULADA";
 export type TipoDocumentoVenta = "DOCUMENTO_POS" | "FACTURA_ELECTRONICA";
 
 export interface VentaItem {
   id: number;
-  productoId: number;
-  producto: Producto;
+  productoId: number | null;
+  producto: Producto | null;
   nombreProducto: string;
   cantidad: number;
   precioUnitario: number;
+  costoUnitarioLibre: number | null;
   ivaTasa: number;
   descuento: number;
   subtotal: number;
+}
+
+export type TipoMovimientoCuenta = "CARGO" | "ABONO" | "AJUSTE";
+
+export interface CuentaCorrienteMovimiento {
+  id: number;
+  clienteId: number;
+  tipo: TipoMovimientoCuenta;
+  monto: number;
+  saldoResultante: number;
+  ventaId: number | null;
+  metodoPago: string | null;
+  motivo: string | null;
+  usuario?: { nombre: string };
+  createdAt: string;
+}
+
+export interface EstadoCuentaCliente {
+  cliente: Cliente;
+  movimientos: CuentaCorrienteMovimiento[];
+  ventasCredito: { total: number; createdAt: string }[];
+  diasVencido: number;
+}
+
+export interface ResumenCartera {
+  totalCartera: number;
+  totalVencido: number;
+  numeroClientes: number;
+  diasParaVencido: number;
+  clientes: { clienteId: number; nombre: string; telefono: string | null; saldoPendiente: number; diasVencido: number }[];
 }
 
 export interface Venta {
@@ -130,6 +167,12 @@ export interface Configuracion {
   proveedorApiKey: string | null;
   proveedorApiSecretConfigurado: boolean;
   formatoRecibo: "58MM" | "80MM";
+  tipoNegocio: string;
+  limiteCreditoPorDefecto: number;
+  diasPlazoCreditoPorDefecto: number;
+  diasParaVencido: number;
+  margenAlertaPct: number;
+  descuentoMaximoCajeroPct: number;
 }
 
 export interface ResumenReporte {

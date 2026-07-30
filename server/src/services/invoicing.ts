@@ -19,7 +19,7 @@
 import type { Cliente, Configuracion, Producto, Venta, VentaItem } from "@prisma/client";
 
 export interface VentaParaFacturar extends Venta {
-  items: (VentaItem & { producto: Producto })[];
+  items: (VentaItem & { producto: Producto | null })[];
   cliente: Cliente | null;
 }
 
@@ -97,7 +97,7 @@ export class FactusProvider implements InvoicingProvider {
         phone: cliente?.telefono ?? undefined,
       },
       items: venta.items.map((item) => ({
-        code_reference: item.producto.codigoBarras ?? String(item.productoId),
+        code_reference: item.producto?.codigoBarras ?? String(item.productoId ?? item.nombreProducto),
         name: item.nombreProducto,
         quantity: item.cantidad,
         price: item.precioUnitario,

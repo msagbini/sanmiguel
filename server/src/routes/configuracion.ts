@@ -32,6 +32,12 @@ const schema = z.object({
   proveedorApiKey: z.string().nullish(),
   proveedorApiSecret: z.string().nullish(),
   formatoRecibo: z.enum(["58MM", "80MM"]).optional(),
+  tipoNegocio: z.string().optional(),
+  limiteCreditoPorDefecto: z.number().min(0).optional(),
+  diasPlazoCreditoPorDefecto: z.number().int().min(1).optional(),
+  diasParaVencido: z.number().int().min(1).optional(),
+  margenAlertaPct: z.number().min(0).optional(),
+  descuentoMaximoCajeroPct: z.number().min(0).max(100).optional(),
 });
 
 router.put("/", requireRole("ADMIN"), async (req, res) => {

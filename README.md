@@ -17,19 +17,42 @@ de código de barras y facturación electrónica DIAN.
   mantener el foco en el campo de escaneo), carrito, catálogo con filtro por
   categoría para productos sin código de barras, clientes, formas de pago
   (efectivo con cálculo de cambio, tarjeta, transferencia/Nequi/Daviplata,
-  mixto), impresión de recibo (formato 58mm u 80mm para impresora térmica).
-- **Facturación electrónica DIAN**: por defecto la venta se emite como
-  *documento equivalente POS* (comprobante válido para el día a día). Si se
-  activa en Configuración con las credenciales de un proveedor tecnológico
-  autorizado por la DIAN, la venta se factura electrónicamente de forma
-  automática (ver sección de facturación electrónica más abajo).
+  mixto, fiado), impresión de recibo (formato 58mm u 80mm para impresora
+  térmica).
+- **Precio mayorista y ventas al detal**: cada producto puede tener un
+  precio normal y un precio mayorista para tenderos que revenden. Al marcar
+  un cliente como "Mayorista" en el POS, sus precios se ajustan solos. El
+  precio de cada línea del carrito también se puede editar a mano (para un
+  precio negociado puntual), y se puede agregar un "producto libre" (algo
+  que no está en el catálogo, ej. un servicio o un artículo ocasional) sin
+  afectar el inventario.
+- **Protección de margen**: el carrito muestra en vivo la ganancia estimada
+  de la venta (en $ y %) y la resalta en rojo si el margen es bajo. Los
+  descuentos rápidos (1/2/3/5/10% + un valor libre) tienen un tope
+  configurable para cajeros (por defecto 5%) — pasarse de ese tope requiere
+  que un administrador aplique el descuento; el backend lo hace cumplir, no
+  es solo un aviso visual.
+- **Cartera / fiado**: cada cliente puede tener un cupo de crédito y un
+  plazo de pago. Una venta "fiada" no se cobra de inmediato: queda cargada a
+  la cuenta del cliente. La pantalla de Cartera muestra cuánto debe cada
+  cliente, quién está vencido (según el plazo configurado), permite
+  registrar abonos (pagos parciales o totales) y genera un link de WhatsApp
+  con el saldo pendiente listo para enviar como recordatorio. Todo queda en
+  un historial auditable (quién fio, quién recibió el abono, cuándo).
 - **Reportes**: ventas por día, productos más vendidos, ganancia estimada,
   ticket promedio.
-- **Usuarios y roles**: Administrador (todo) y Cajero (solo POS y ver
-  ventas), para que cualquier persona pueda cobrar sin tocar precios ni
-  inventario.
+- **Usuarios y roles**: Administrador (todo, incluye anular ventas y
+  autorizar descuentos/fiados grandes) y Cajero (POS, ver ventas, cartera y
+  clientes, con topes de descuento), para que cualquier persona pueda
+  cobrar sin tocar precios base ni inventario.
 - **PWA**: se puede "instalar" en una tablet o PC desde el navegador
   (ícono en el escritorio, pantalla completa).
+- **Pensada para otros negocios similares**: nada en el modelo de datos
+  depende de que sea una salsamentaria — categorías, unidades, precio
+  mayorista, fiado y roles sirven igual para un minimercado, una tienda de
+  ropa/calzado, una ferretería, etc. (hay un campo "Tipo de negocio" en
+  Configuración, hoy solo informativo). Ver "Roadmap" al final para lo que
+  falta para ese salto (variantes de talla/color, múltiples sucursales).
 
 ## Arquitectura
 
@@ -138,6 +161,34 @@ consumidor final en Colombia). La app calcula internamente la base gravable
 y el IVA para el recibo y los reportes, según la tasa configurada por
 producto (0% para excluidos/exentos, 5% o 19%).
 
+## Fiado y cartera — cómo funciona
+
+El problema real que resuelve: cuando le fían a alguien, esa plata deja de
+verse como "efectivo en caja" pero sigue contando como venta — y si no se
+lleva un registro aparte, es imposible saber cuánto le deben al negocio en
+total y quién no ha pagado.
+
+- En **Clientes**, cada cliente identificado (no el "Consumidor Final"
+  genérico) puede tener un **cupo de fiado** (0 = no se le fía nada) y unos
+  **días de plazo** para pagar.
+- En el **POS**, al elegir "Fiado (crédito)" como forma de pago, la app pide
+  que haya un cliente seleccionado, valida que la venta no se pase de su
+  cupo disponible, y si todo bien, la registra: el recibo sale marcado
+  "QUEDA FIADO — PENDIENTE POR PAGAR" y la deuda del cliente sube.
+- En **Cartera**, se ve cuánto debe cada cliente, hace cuántos días está
+  vencida esa deuda (según su plazo configurado) y el total general por
+  cobrar / vencido. Desde ahí se registra un **abono** (pago total o
+  parcial) y se puede mandar un recordatorio por WhatsApp con un clic (abre
+  WhatsApp Web/App con el mensaje ya escrito — no envía nada automático ni
+  requiere contratar la API de WhatsApp Business).
+- Si se anula una venta fiada, la deuda se revierte sola.
+- Todo movimiento (cada venta fiada, cada abono) queda en un historial con
+  fecha y quién lo hizo, para poder auditar "¿quién le fio esto a fulano?".
+
+Esto no reemplaza la disciplina de cobrar — pero al menos ahora hay un
+número exacto de cuánto se está fiando y a quién, en vez de depender de una
+libreta o de la memoria.
+
 ## Estructura de carpetas
 
 ```
@@ -151,3 +202,24 @@ web/
   src/hooks/useBarcodeScanner.ts  Captura del lector de código de barras
   src/components/Recibo.tsx       Recibo/factura imprimible
 ```
+
+## Roadmap (para crecer a otros negocios / más de un PC)
+
+Lo que ya está construido sirve tal cual para cualquier tienda de barrio,
+minimercado o negocio con mostrador. Si el siguiente paso es venderla a
+otro tipo de negocio o crecer más allá de un solo computador, esto es lo
+que seguiría:
+
+- **Variantes de producto** (talla, color, presentación): útil para ropa y
+  calzado. Hoy cada producto es una sola referencia con un solo precio/stock;
+  una tienda de ropa necesitaría una tabla de variantes por producto.
+- **Multi-sucursal / multi-caja**: la arquitectura ya es cliente-servidor
+  (el backend puede correr en un PC o servidor y varias cajas/tablets
+  conectarse por la red local a la misma base de datos), pero para varias
+  *sucursales* independientes con su propio inventario habría que agregar
+  el concepto de "sede" al modelo de datos.
+- **Backups automáticos**: hoy la base de datos es un archivo SQLite; para
+  producción seria vale la pena programar una copia automática diaria (a un
+  USB, a la nube, etc.) — no soportar la pérdida de ese único archivo.
+- **Notificaciones automáticas de cartera vencida** (hoy el recordatorio de
+  WhatsApp es manual, con un clic).

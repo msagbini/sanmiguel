@@ -7,6 +7,14 @@ const formatoMoneda = new Intl.NumberFormat("es-CO", {
   maximumFractionDigits: 0,
 });
 
+const METODO_PAGO_LABELS: Record<string, string> = {
+  EFECTIVO: "Efectivo",
+  TARJETA: "Tarjeta",
+  TRANSFERENCIA: "Transferencia",
+  MIXTO: "Mixto",
+  CREDITO: "Fiado (crédito)",
+};
+
 export function Recibo({ venta, config }: { venta: Venta; config: Configuracion }) {
   const ancho = config.formatoRecibo === "58MM" ? "max-w-[220px]" : "max-w-[300px]";
   const esFactura = venta.tipoDocumento === "FACTURA_ELECTRONICA";
@@ -74,7 +82,10 @@ export function Recibo({ venta, config }: { venta: Venta; config: Configuracion 
 
       <div className="my-2 border-t border-dashed border-black" />
 
-      <p>Forma de pago: {venta.metodoPago}</p>
+      <p>Forma de pago: {METODO_PAGO_LABELS[venta.metodoPago] ?? venta.metodoPago}</p>
+      {venta.metodoPago === "CREDITO" && (
+        <p className="text-center font-bold">*** QUEDA FIADO — PENDIENTE POR PAGAR ***</p>
+      )}
       {venta.efectivoRecibido != null && (
         <>
           <div className="flex justify-between">

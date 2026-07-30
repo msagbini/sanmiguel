@@ -82,6 +82,7 @@ const productoSchema = z.object({
   unidad: z.enum(UNIDADES).default("UNIDAD"),
   precioCosto: z.number().min(0).default(0),
   precioVenta: z.number().min(0),
+  precioMayorista: z.number().min(0).nullish(),
   ivaTasa: z.number().refine((v) => (IVA_TASAS as readonly number[]).includes(v), {
     message: "Tasa de IVA inválida (debe ser 0, 5 o 19)",
   }),

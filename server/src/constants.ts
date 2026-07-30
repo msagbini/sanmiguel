@@ -30,8 +30,15 @@ export type TipoMovimiento = (typeof TIPOS_MOVIMIENTO)[number];
 
 export const TIPOS_DOCUMENTO_CLIENTE = ["CC", "NIT", "CE", "PASAPORTE"] as const;
 
-export const METODOS_PAGO = ["EFECTIVO", "TARJETA", "TRANSFERENCIA", "MIXTO"] as const;
+export const TIPOS_CLIENTE = ["DETAL", "MAYORISTA"] as const;
+export type TipoCliente = (typeof TIPOS_CLIENTE)[number];
+
+// CREDITO = "fiado": no se cobra de inmediato, se carga a la cuenta corriente del cliente.
+export const METODOS_PAGO = ["EFECTIVO", "TARJETA", "TRANSFERENCIA", "MIXTO", "CREDITO"] as const;
 export type MetodoPago = (typeof METODOS_PAGO)[number];
+
+export const TIPOS_MOVIMIENTO_CUENTA = ["CARGO", "ABONO", "AJUSTE"] as const;
+export type TipoMovimientoCuenta = (typeof TIPOS_MOVIMIENTO_CUENTA)[number];
 
 export const ESTADOS_VENTA = ["COMPLETADA", "ANULADA"] as const;
 

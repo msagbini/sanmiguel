@@ -6,6 +6,7 @@ import type { Rol } from "../types";
 const NAV: { to: string; label: string; icon: string; roles: Rol[] }[] = [
   { to: "/", label: "Punto de venta", icon: "🛒", roles: ["ADMIN", "CAJERO"] },
   { to: "/ventas", label: "Ventas", icon: "🧾", roles: ["ADMIN", "CAJERO"] },
+  { to: "/cartera", label: "Cartera (fiado)", icon: "💳", roles: ["ADMIN", "CAJERO"] },
   { to: "/productos", label: "Productos", icon: "📦", roles: ["ADMIN"] },
   { to: "/inventario", label: "Inventario", icon: "📊", roles: ["ADMIN"] },
   { to: "/clientes", label: "Clientes", icon: "👤", roles: ["ADMIN", "CAJERO"] },

@@ -9,6 +9,7 @@ import { Ventas } from "./pages/Ventas";
 import { Productos } from "./pages/Productos";
 import { Inventario } from "./pages/Inventario";
 import { Clientes } from "./pages/Clientes";
+import { Cartera } from "./pages/Cartera";
 import { Reportes } from "./pages/Reportes";
 import { Configuracion } from "./pages/Configuracion";
 
@@ -45,6 +46,7 @@ function App() {
                 }
               />
               <Route path="/clientes" element={<Clientes />} />
+              <Route path="/cartera" element={<Cartera />} />
               <Route
                 path="/reportes"
                 element={

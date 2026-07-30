@@ -64,6 +64,38 @@ export function Configuracion() {
               <option value="80MM">80mm</option>
             </select>
           </Campo>
+          <Campo label="Tipo de negocio">
+            <select value={config.tipoNegocio} onChange={(e) => set("tipoNegocio", e.target.value)} className="input">
+              <option value="OTRO">Otro</option>
+              <option value="SALSAMENTARIA_MINIMERCADO">Salsamentaria / minimercado</option>
+              <option value="ROPA_CALZADO">Ropa y calzado</option>
+              <option value="FERRETERIA">Ferretería</option>
+              <option value="PAPELERIA">Papelería</option>
+            </select>
+          </Campo>
+        </div>
+      </Seccion>
+
+      <Seccion
+        titulo="Ventas al por mayor, descuentos y fiado"
+        descripcion="Parámetros para proteger el margen (el negocio vende con margen bruto bajo) y para controlar cuánto se le puede fiar a un cliente por defecto."
+      >
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Campo label="Descuento máximo que un cajero puede aplicar sin autorización (%)">
+            <input type="number" value={config.descuentoMaximoCajeroPct} onChange={(e) => set("descuentoMaximoCajeroPct", Number(e.target.value))} className="input" />
+          </Campo>
+          <Campo label="Alertar si el margen de una venta baja de (%)">
+            <input type="number" value={config.margenAlertaPct} onChange={(e) => set("margenAlertaPct", Number(e.target.value))} className="input" />
+          </Campo>
+          <Campo label="Cupo de fiado por defecto para clientes nuevos">
+            <input type="number" value={config.limiteCreditoPorDefecto} onChange={(e) => set("limiteCreditoPorDefecto", Number(e.target.value))} className="input" />
+          </Campo>
+          <Campo label="Días de plazo por defecto">
+            <input type="number" value={config.diasPlazoCreditoPorDefecto} onChange={(e) => set("diasPlazoCreditoPorDefecto", Number(e.target.value))} className="input" />
+          </Campo>
+          <Campo label="Días para marcar una deuda como vencida en Cartera">
+            <input type="number" value={config.diasParaVencido} onChange={(e) => set("diasParaVencido", Number(e.target.value))} className="input" />
+          </Campo>
         </div>
       </Seccion>
 

@@ -14,6 +14,7 @@ const PRODUCTO_VACIO = {
   unidad: "UNIDAD" as Unidad,
   precioCosto: "",
   precioVenta: "",
+  precioMayorista: "",
   ivaTasa: 19,
   stock: "",
   stockMinimo: "",
@@ -64,6 +65,7 @@ export function Productos() {
         unidad: p.unidad,
         precioCosto: String(p.precioCosto),
         precioVenta: String(p.precioVenta),
+        precioMayorista: p.precioMayorista != null ? String(p.precioMayorista) : "",
         ivaTasa: p.ivaTasa,
         stock: String(p.stock),
         stockMinimo: String(p.stockMinimo),
@@ -81,6 +83,7 @@ export function Productos() {
       unidad: form.unidad,
       precioCosto: Number(form.precioCosto) || 0,
       precioVenta: Number(form.precioVenta),
+      precioMayorista: form.precioMayorista ? Number(form.precioMayorista) : null,
       ivaTasa: Number(form.ivaTasa),
       stock: Number(form.stock) || 0,
       stockMinimo: Number(form.stockMinimo) || 0,
@@ -169,7 +172,12 @@ export function Productos() {
                 <td className="px-3 py-2 text-stone-500">{p.codigoBarras ?? "-"}</td>
                 <td className="px-3 py-2 text-stone-500">{p.categoria?.nombre ?? "-"}</td>
                 <td className="px-3 py-2">{formatoMoneda.format(p.precioCosto)}</td>
-                <td className="px-3 py-2 font-semibold">{formatoMoneda.format(p.precioVenta)}</td>
+                <td className="px-3 py-2">
+                  <p className="font-semibold">{formatoMoneda.format(p.precioVenta)}</p>
+                  {p.precioMayorista != null && (
+                    <p className="text-xs text-blue-700">May: {formatoMoneda.format(p.precioMayorista)}</p>
+                  )}
+                </td>
                 <td className="px-3 py-2">{p.ivaTasa}%</td>
                 <td className={`px-3 py-2 font-semibold ${p.stock <= p.stockMinimo ? "text-red-600" : ""}`}>
                   {p.stock} {UNIDAD_LABELS[p.unidad]}
@@ -293,11 +301,21 @@ export function Productos() {
                 />
               </label>
               <label className="text-sm">
-                Precio de venta * (IVA incluido)
+                Precio de venta al detal * (IVA incluido)
                 <input
                   type="number"
                   value={form.precioVenta}
                   onChange={(e) => setForm((f) => ({ ...f, precioVenta: e.target.value }))}
+                  className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2"
+                />
+              </label>
+              <label className="text-sm">
+                Precio mayorista (opcional, para tenderos)
+                <input
+                  type="number"
+                  value={form.precioMayorista}
+                  onChange={(e) => setForm((f) => ({ ...f, precioMayorista: e.target.value }))}
+                  placeholder="Igual al de detal si se deja vacío"
                   className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2"
                 />
               </label>

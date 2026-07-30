@@ -1,12 +1,26 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { api, ApiError } from "../api";
 import { useToast } from "../Toast";
-import type { Cliente, TipoDocumentoCliente } from "../types";
+import type { Cliente, TipoCliente, TipoDocumentoCliente } from "../types";
 
-const VACIO = { tipoDocumento: "CC" as TipoDocumentoCliente, numeroDocumento: "", nombre: "", telefono: "", email: "", direccion: "" };
+const formatoMoneda = new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 });
+
+const VACIO = {
+  tipoDocumento: "CC" as TipoDocumentoCliente,
+  numeroDocumento: "",
+  nombre: "",
+  telefono: "",
+  email: "",
+  direccion: "",
+  tipoCliente: "DETAL" as TipoCliente,
+  limiteCredito: "0",
+  diasPlazoCredito: "30",
+};
 
 export function Clientes() {
   const { notificar } = useToast();
+  const navigate = useNavigate();
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [busqueda, setBusqueda] = useState("");
   const [modalAbierto, setModalAbierto] = useState<Cliente | "nuevo" | null>(null);
@@ -31,6 +45,9 @@ export function Clientes() {
         telefono: c.telefono ?? "",
         email: c.email ?? "",
         direccion: c.direccion ?? "",
+        tipoCliente: c.tipoCliente,
+        limiteCredito: String(c.limiteCredito),
+        diasPlazoCredito: String(c.diasPlazoCredito),
       });
     setModalAbierto(c);
   }
@@ -40,12 +57,17 @@ export function Clientes() {
       notificar("Nombre y documento son obligatorios", "error");
       return;
     }
+    const data = {
+      ...form,
+      limiteCredito: Number(form.limiteCredito) || 0,
+      diasPlazoCredito: Number(form.diasPlazoCredito) || 30,
+    };
     try {
       if (modalAbierto === "nuevo") {
-        await api.post("/clientes", form);
+        await api.post("/clientes", data);
         notificar("Cliente creado", "exito");
       } else if (modalAbierto) {
-        await api.put(`/clientes/${modalAbierto.id}`, form);
+        await api.put(`/clientes/${modalAbierto.id}`, data);
         notificar("Cliente actualizado", "exito");
       }
       setModalAbierto(null);
@@ -80,8 +102,10 @@ export function Clientes() {
             <tr>
               <th className="px-3 py-2">Nombre</th>
               <th className="px-3 py-2">Documento</th>
+              <th className="px-3 py-2">Tipo</th>
               <th className="px-3 py-2">Teléfono</th>
-              <th className="px-3 py-2">Email</th>
+              <th className="px-3 py-2">Cupo de fiado</th>
+              <th className="px-3 py-2">Debe</th>
               <th className="px-3 py-2"></th>
             </tr>
           </thead>
@@ -92,18 +116,35 @@ export function Clientes() {
                 <td className="px-3 py-2">
                   {c.tipoDocumento} {c.numeroDocumento}
                 </td>
-                <td className="px-3 py-2">{c.telefono ?? "-"}</td>
-                <td className="px-3 py-2">{c.email ?? "-"}</td>
                 <td className="px-3 py-2">
-                  <button onClick={() => abrir(c)} className="text-xs font-semibold text-orange-800 underline">
-                    Editar
-                  </button>
+                  {c.tipoCliente === "MAYORISTA" ? (
+                    <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-700">Mayorista</span>
+                  ) : (
+                    <span className="text-xs text-stone-400">Detal</span>
+                  )}
+                </td>
+                <td className="px-3 py-2">{c.telefono ?? "-"}</td>
+                <td className="px-3 py-2">{c.limiteCredito > 0 ? formatoMoneda.format(c.limiteCredito) : "No fía"}</td>
+                <td className={`px-3 py-2 font-semibold ${c.saldoPendiente > 0 ? "text-red-600" : ""}`}>
+                  {c.saldoPendiente > 0 ? formatoMoneda.format(c.saldoPendiente) : "-"}
+                </td>
+                <td className="px-3 py-2">
+                  <div className="flex gap-2 whitespace-nowrap">
+                    <button onClick={() => abrir(c)} className="text-xs font-semibold text-orange-800 underline">
+                      Editar
+                    </button>
+                    {c.limiteCredito > 0 && (
+                      <button onClick={() => navigate(`/cartera?cliente=${c.id}`)} className="text-xs font-semibold text-blue-800 underline">
+                        Ver cuenta
+                      </button>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}
             {clientes.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-3 py-8 text-center text-stone-400">
+                <td colSpan={7} className="px-3 py-8 text-center text-stone-400">
                   Aún no hay clientes registrados
                 </td>
               </tr>
@@ -132,6 +173,36 @@ export function Clientes() {
               <input placeholder="Teléfono" value={form.telefono} onChange={(e) => setForm((f) => ({ ...f, telefono: e.target.value }))} className="rounded-lg border border-stone-300 px-3 py-2" />
               <input placeholder="Email (opcional)" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} className="rounded-lg border border-stone-300 px-3 py-2" />
               <input placeholder="Dirección (opcional)" value={form.direccion} onChange={(e) => setForm((f) => ({ ...f, direccion: e.target.value }))} className="rounded-lg border border-stone-300 px-3 py-2" />
+
+              <div className="rounded-lg border border-stone-200 bg-stone-50 p-3">
+                <p className="mb-2 text-xs font-semibold uppercase text-stone-500">Tipo de cliente y fiado</p>
+                <select
+                  value={form.tipoCliente}
+                  onChange={(e) => setForm((f) => ({ ...f, tipoCliente: e.target.value as TipoCliente }))}
+                  className="mb-2 w-full rounded-lg border border-stone-300 px-3 py-2"
+                >
+                  <option value="DETAL">Detal (precio normal)</option>
+                  <option value="MAYORISTA">Mayorista / tendero (precio mayorista)</option>
+                </select>
+                <label className="mb-2 block text-sm">
+                  Cupo máximo de fiado (0 = no se le fía)
+                  <input
+                    type="number"
+                    value={form.limiteCredito}
+                    onChange={(e) => setForm((f) => ({ ...f, limiteCredito: e.target.value }))}
+                    className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2"
+                  />
+                </label>
+                <label className="block text-sm">
+                  Días de plazo para pagar
+                  <input
+                    type="number"
+                    value={form.diasPlazoCredito}
+                    onChange={(e) => setForm((f) => ({ ...f, diasPlazoCredito: e.target.value }))}
+                    className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2"
+                  />
+                </label>
+              </div>
             </div>
             <div className="mt-5 flex gap-2">
               <button onClick={guardar} className="flex-1 rounded-lg bg-orange-800 py-2.5 font-semibold text-white hover:bg-orange-900">

@@ -2,17 +2,35 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../db";
 import { requireAuth, requireRole } from "../middleware/auth";
-import { METODOS_PAGO } from "../constants";
+import { METODOS_PAGO, IVA_TASAS } from "../constants";
 import { getInvoicingProvider } from "../services/invoicing";
 
 const router = Router();
 router.use(requireAuth);
 
-const itemSchema = z.object({
-  productoId: z.number().int(),
-  cantidad: z.number().positive(),
-  descuento: z.number().min(0).default(0),
-});
+const VENTA_INCLUDE = {
+  items: { include: { producto: true } },
+  cliente: true,
+  usuario: { select: { nombre: true } },
+} as const;
+
+// productoId ausente = "producto libre": algo que no está en el catálogo y se
+// agrega a mano (nombre, precio e IVA los define quien vende). precioUnitario
+// también sirve para sobreescribir el precio de un producto del catálogo
+// (precio mayorista, negociado, etc.).
+const itemSchema = z
+  .object({
+    productoId: z.number().int().nullish(),
+    nombreProducto: z.string().min(1).optional(),
+    cantidad: z.number().positive(),
+    precioUnitario: z.number().min(0).optional(),
+    ivaTasa: z.number().optional(),
+    costoUnitarioLibre: z.number().min(0).optional(),
+    descuento: z.number().min(0).default(0),
+  })
+  .refine((item) => item.productoId != null || (item.nombreProducto && item.precioUnitario != null), {
+    message: "Un producto libre necesita nombre y precio",
+  });
 
 const ventaSchema = z.object({
   clienteId: z.number().int().nullish(),
@@ -21,7 +39,7 @@ const ventaSchema = z.object({
   efectivoRecibido: z.number().min(0).nullish(),
 });
 
-// Calcula base gravable e IVA asumiendo que precioVenta ya incluye IVA
+// Calcula base gravable e IVA asumiendo que precioUnitario ya incluye IVA
 // (así se exhiben los precios al consumidor final en Colombia).
 function calcularItem(precioUnitario: number, cantidad: number, descuento: number, ivaTasa: number) {
   const totalConIva = precioUnitario * cantidad - descuento;
@@ -56,11 +74,7 @@ router.get("/", async (req, res) => {
 router.get("/:id", async (req, res) => {
   const venta = await prisma.venta.findUnique({
     where: { id: Number(req.params.id) },
-    include: {
-      cliente: true,
-      usuario: { select: { nombre: true } },
-      items: { include: { producto: true } },
-    },
+    include: VENTA_INCLUDE,
   });
   if (!venta) return res.status(404).json({ error: "Venta no encontrada" });
   res.json(venta);
@@ -71,12 +85,17 @@ router.post("/", async (req, res) => {
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
   const { clienteId, items, metodoPago, efectivoRecibido } = parsed.data;
 
-  const productos = await prisma.producto.findMany({
-    where: { id: { in: items.map((i) => i.productoId) } },
-  });
+  const idsProductos = items.map((i) => i.productoId).filter((id): id is number => id != null);
+  const productos = await prisma.producto.findMany({ where: { id: { in: idsProductos } } });
   const productosPorId = new Map(productos.map((p) => [p.id, p]));
 
   for (const item of items) {
+    if (item.productoId == null) {
+      if (!IVA_TASAS.includes(item.ivaTasa as (typeof IVA_TASAS)[number])) {
+        return res.status(400).json({ error: `IVA inválido para "${item.nombreProducto}"` });
+      }
+      continue;
+    }
     const producto = productosPorId.get(item.productoId);
     if (!producto) return res.status(404).json({ error: `Producto ${item.productoId} no encontrado` });
     if (!producto.activo) return res.status(400).json({ error: `${producto.nombre} no está disponible` });
@@ -91,24 +110,24 @@ router.post("/", async (req, res) => {
   let ivaTotal = 0;
   let descuentoTotal = 0;
   let total = 0;
+  let brutoSinDescuento = 0;
   const itemsData = items.map((item) => {
-    const producto = productosPorId.get(item.productoId)!;
-    const { totalConIva, base, iva } = calcularItem(
-      producto.precioVenta,
-      item.cantidad,
-      item.descuento,
-      producto.ivaTasa
-    );
+    const producto = item.productoId != null ? productosPorId.get(item.productoId)! : null;
+    const precioUnitario = item.precioUnitario ?? producto?.precioVenta ?? 0;
+    const ivaTasa = producto?.ivaTasa ?? item.ivaTasa ?? 0;
+    const { totalConIva, base, iva } = calcularItem(precioUnitario, item.cantidad, item.descuento, ivaTasa);
     subtotal += base;
     ivaTotal += iva;
     descuentoTotal += item.descuento;
     total += totalConIva;
+    brutoSinDescuento += precioUnitario * item.cantidad;
     return {
-      productoId: producto.id,
-      nombreProducto: producto.nombre,
+      productoId: producto?.id ?? null,
+      nombreProducto: producto?.nombre ?? item.nombreProducto!,
       cantidad: item.cantidad,
-      precioUnitario: producto.precioVenta,
-      ivaTasa: producto.ivaTasa,
+      precioUnitario,
+      costoUnitarioLibre: producto ? null : (item.costoUnitarioLibre ?? 0),
+      ivaTasa,
       descuento: item.descuento,
       subtotal: totalConIva,
     };
@@ -116,6 +135,36 @@ router.post("/", async (req, res) => {
 
   if (metodoPago === "EFECTIVO" && efectivoRecibido != null && efectivoRecibido < total) {
     return res.status(400).json({ error: "El efectivo recibido es menor que el total de la venta" });
+  }
+
+  const config = await prisma.configuracion.upsert({ where: { id: 1 }, update: {}, create: {} });
+
+  // Protección de margen: un cajero no puede regalar más descuento del
+  // tope configurado sin que un administrador lo autorice desde su propia sesión.
+  if (req.user!.rol === "CAJERO" && brutoSinDescuento > 0) {
+    const descuentoPct = (descuentoTotal / brutoSinDescuento) * 100;
+    if (descuentoPct > config.descuentoMaximoCajeroPct) {
+      return res.status(403).json({
+        error: `El descuento (${descuentoPct.toFixed(1)}%) supera el máximo permitido para cajeros (${config.descuentoMaximoCajeroPct}%). Pide a un administrador que lo aplique.`,
+      });
+    }
+  }
+
+  let cliente = clienteId ? await prisma.cliente.findUnique({ where: { id: clienteId } }) : null;
+
+  if (metodoPago === "CREDITO") {
+    if (!cliente || cliente.esConsumidorFinal) {
+      return res.status(400).json({ error: "Para fiar una venta hay que identificar al cliente" });
+    }
+    if (cliente.limiteCredito <= 0) {
+      return res.status(400).json({ error: `${cliente.nombre} no tiene cupo de fiado habilitado` });
+    }
+    if (cliente.saldoPendiente + total > cliente.limiteCredito) {
+      const disponible = Math.max(0, cliente.limiteCredito - cliente.saldoPendiente);
+      return res.status(400).json({
+        error: `${cliente.nombre} no tiene cupo suficiente para fiar $${total.toFixed(0)} (debe $${cliente.saldoPendiente.toFixed(0)}, cupo disponible $${disponible.toFixed(0)})`,
+      });
+    }
   }
 
   const ultima = await prisma.venta.findFirst({
@@ -136,14 +185,15 @@ router.post("/", async (req, res) => {
         ivaTotal,
         total,
         metodoPago,
-        efectivoRecibido: efectivoRecibido ?? null,
-        cambio: efectivoRecibido != null ? efectivoRecibido - total : null,
+        efectivoRecibido: metodoPago === "EFECTIVO" ? (efectivoRecibido ?? null) : null,
+        cambio: metodoPago === "EFECTIVO" && efectivoRecibido != null ? efectivoRecibido - total : null,
         items: { create: itemsData },
       },
-      include: { items: { include: { producto: true } }, cliente: true, usuario: { select: { nombre: true } } },
+      include: VENTA_INCLUDE,
     });
 
     for (const item of itemsData) {
+      if (item.productoId == null) continue; // los productos libres no afectan inventario
       await tx.producto.update({
         where: { id: item.productoId },
         data: { stock: { decrement: item.cantidad } },
@@ -155,6 +205,22 @@ router.post("/", async (req, res) => {
           cantidad: item.cantidad,
           usuarioId: req.user!.id,
           ventaId: nueva.id,
+        },
+      });
+    }
+
+    if (metodoPago === "CREDITO" && cliente) {
+      const nuevoSaldo = cliente.saldoPendiente + total;
+      await tx.cliente.update({ where: { id: cliente.id }, data: { saldoPendiente: nuevoSaldo } });
+      await tx.cuentaCorrienteMovimiento.create({
+        data: {
+          clienteId: cliente.id,
+          tipo: "CARGO",
+          monto: total,
+          saldoResultante: nuevoSaldo,
+          ventaId: nueva.id,
+          motivo: `Venta fiada #${nueva.prefijo}-${nueva.numero}`,
+          usuarioId: req.user!.id,
         },
       });
     }
@@ -179,7 +245,7 @@ async function intentarFacturar(ventaId: number) {
 
   const venta = await prisma.venta.findUniqueOrThrow({
     where: { id: ventaId },
-    include: { items: { include: { producto: true } }, cliente: true, usuario: { select: { nombre: true } } },
+    include: VENTA_INCLUDE,
   });
 
   if (!config.facturacionElectronicaHabilitada) {
@@ -197,7 +263,7 @@ async function intentarFacturar(ventaId: number) {
         urlQr: resultado.urlQr,
         proveedorFactura: resultado.proveedor,
       },
-      include: { items: { include: { producto: true } }, cliente: true, usuario: { select: { nombre: true } } },
+      include: VENTA_INCLUDE,
     });
     return { venta: actualizada, facturacionElectronicaError: null as string | null };
   } catch (err) {
@@ -237,7 +303,9 @@ router.post("/:id/anular", requireRole("ADMIN"), async (req, res) => {
       where: { id },
       data: { estado: "ANULADA", motivoAnulacion: parsed.data.motivo },
     });
+
     for (const item of venta.items) {
+      if (item.productoId == null) continue;
       await tx.producto.update({
         where: { id: item.productoId },
         data: { stock: { increment: item.cantidad } },
@@ -250,6 +318,24 @@ router.post("/:id/anular", requireRole("ADMIN"), async (req, res) => {
           motivo: `Anulación de venta #${venta.prefijo}-${venta.numero}: ${parsed.data.motivo}`,
           usuarioId: req.user!.id,
           ventaId: venta.id,
+        },
+      });
+    }
+
+    // Si era una venta fiada, se reversa la deuda que había generado en la cuenta del cliente.
+    if (venta.metodoPago === "CREDITO" && venta.clienteId) {
+      const cliente = await tx.cliente.findUniqueOrThrow({ where: { id: venta.clienteId } });
+      const nuevoSaldo = cliente.saldoPendiente - venta.total;
+      await tx.cliente.update({ where: { id: cliente.id }, data: { saldoPendiente: nuevoSaldo } });
+      await tx.cuentaCorrienteMovimiento.create({
+        data: {
+          clienteId: cliente.id,
+          tipo: "AJUSTE",
+          monto: -venta.total,
+          saldoResultante: nuevoSaldo,
+          ventaId: venta.id,
+          motivo: `Reversa por anulación de venta #${venta.prefijo}-${venta.numero}: ${parsed.data.motivo}`,
+          usuarioId: req.user!.id,
         },
       });
     }

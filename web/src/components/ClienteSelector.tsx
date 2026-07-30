@@ -57,6 +57,14 @@ export function ClienteSelector({
       >
         <span className="text-stone-500">Cliente: </span>
         <span className="font-medium">{cliente?.nombre ?? "Consumidor Final"}</span>
+        {cliente?.tipoCliente === "MAYORISTA" && (
+          <span className="ml-2 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-700">Mayorista</span>
+        )}
+        {cliente && cliente.saldoPendiente > 0 && (
+          <span className="ml-2 rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700">
+            Debe ${cliente.saldoPendiente.toLocaleString("es-CO")}
+          </span>
+        )}
       </button>
     );
   }

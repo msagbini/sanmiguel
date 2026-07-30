@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { prisma } from "../db";
 import { requireAuth } from "../middleware/auth";
+import { calcularDiasVencido } from "../services/cartera";
 
 const router = Router();
 router.use(requireAuth);
@@ -30,8 +31,8 @@ router.get("/resumen", async (req, res) => {
     totalIva += venta.ivaTotal;
     for (const item of venta.items) {
       const base = item.subtotal / (1 + item.ivaTasa / 100);
-      const costo = item.producto.precioCosto * item.cantidad;
-      ganancia += base - costo;
+      const costoUnitario = item.producto?.precioCosto ?? item.costoUnitarioLibre ?? 0;
+      ganancia += base - costoUnitario * item.cantidad;
       unidadesVendidas += item.cantidad;
     }
   }
@@ -61,15 +62,16 @@ router.get("/top-productos", async (req, res) => {
   >();
 
   for (const item of items) {
-    const actual = porProducto.get(item.productoId) ?? {
-      productoId: item.productoId,
+    const clave = item.productoId ?? -item.id; // los productos libres no agrupan entre sí
+    const actual = porProducto.get(clave) ?? {
+      productoId: clave,
       nombre: item.nombreProducto,
       cantidad: 0,
       total: 0,
     };
     actual.cantidad += item.cantidad;
     actual.total += item.subtotal;
-    porProducto.set(item.productoId, actual);
+    porProducto.set(clave, actual);
   }
 
   const top = [...porProducto.values()].sort((a, b) => b.cantidad - a.cantidad).slice(0, limit);
@@ -99,6 +101,53 @@ router.get("/stock-bajo", async (_req, res) => {
   const productos = await prisma.producto.findMany({ where: { activo: true } });
   const bajos = productos.filter((p) => p.stock <= p.stockMinimo);
   res.json(bajos);
+});
+
+// Cartera (fiado): panorama general de cuánto deben los clientes y quién está vencido.
+router.get("/cartera", async (_req, res) => {
+  const config = await prisma.configuracion.upsert({ where: { id: 1 }, update: {}, create: {} });
+  const clientes = await prisma.cliente.findMany({ where: { saldoPendiente: { gt: 0 } } });
+
+  let totalCartera = 0;
+  let totalVencido = 0;
+  const detalle: { clienteId: number; nombre: string; telefono: string | null; saldoPendiente: number; diasVencido: number }[] = [];
+
+  for (const cliente of clientes) {
+    totalCartera += cliente.saldoPendiente;
+
+    const [abonos, ventasCredito] = await Promise.all([
+      prisma.cuentaCorrienteMovimiento.aggregate({
+        where: { clienteId: cliente.id, tipo: "ABONO" },
+        _sum: { monto: true },
+      }),
+      prisma.venta.findMany({
+        where: { clienteId: cliente.id, metodoPago: "CREDITO", estado: "COMPLETADA" },
+        orderBy: { createdAt: "asc" },
+        select: { total: true, createdAt: true },
+      }),
+    ]);
+
+    const diasVencido = calcularDiasVencido(ventasCredito, abonos._sum.monto ?? 0, cliente.diasPlazoCredito);
+
+    if (diasVencido > 0) totalVencido += cliente.saldoPendiente;
+    detalle.push({
+      clienteId: cliente.id,
+      nombre: cliente.nombre,
+      telefono: cliente.telefono,
+      saldoPendiente: cliente.saldoPendiente,
+      diasVencido,
+    });
+  }
+
+  detalle.sort((a, b) => b.diasVencido - a.diasVencido || b.saldoPendiente - a.saldoPendiente);
+
+  res.json({
+    totalCartera,
+    totalVencido,
+    numeroClientes: clientes.length,
+    diasParaVencido: config.diasParaVencido,
+    clientes: detalle,
+  });
 });
 
 export default router;

@@ -20,8 +20,9 @@ model Usuario {
   activo       Boolean  @default(true)
   createdAt    DateTime @default(now())
 
-  ventas       Venta[]
-  movimientos  MovimientoInventario[]
+  ventas            Venta[]
+  movimientos       MovimientoInventario[]
+  movimientosCuenta CuentaCorrienteMovimiento[]
 }
 
 model Categoria {
@@ -31,29 +32,32 @@ model Categoria {
 }
 
 model Producto {
-  id            Int      @id @default(autoincrement())
-  codigoBarras  String?  @unique
-  nombre        String
-  descripcion   String?
-  categoriaId   Int?
-  categoria     Categoria? @relation(fields: [categoriaId], references: [id])
+  id              Int        @id @default(autoincrement())
+  codigoBarras    String?    @unique
+  nombre          String
+  descripcion     String?
+  categoriaId     Int?
+  categoria       Categoria? @relation(fields: [categoriaId], references: [id])
   // Unidad de venta: UNIDAD | PAQUETE | CAJA | KILOGRAMO | GRAMO | LIBRA | LITRO
   // Importante para una salsamentaria: se vende tanto por unidad suelta como por caja/paquete mayor.
-  unidad        String   @default("UNIDAD")
-  precioCosto   Float    @default(0)
-  precioVenta   Float
+  unidad          String     @default("UNIDAD")
+  precioCosto     Float      @default(0)
+  precioVenta     Float
+  // Precio especial para clientes mayoristas/tenderos que revenden el producto.
+  // Si es null, se usa precioVenta también para mayoristas.
+  precioMayorista Float?
   // Tasa de IVA aplicable en Colombia: 0 (excluido/exento), 5 o 19.
   // Muchos productos de una salsamentaria (alimentos de la canasta básica) están excluidos o al 5%.
-  ivaTasa       Int      @default(0)
-  stock         Float    @default(0)
-  stockMinimo   Float    @default(0)
-  activo        Boolean  @default(true)
-  imagenUrl     String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  ivaTasa         Int        @default(0)
+  stock           Float      @default(0)
+  stockMinimo     Float      @default(0)
+  activo          Boolean    @default(true)
+  imagenUrl       String?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
 
-  movimientos   MovimientoInventario[]
-  ventaItems    VentaItem[]
+  movimientos MovimientoInventario[]
+  ventaItems  VentaItem[]
 
   @@index([nombre])
 }
@@ -86,79 +90,132 @@ model Cliente {
   email             String?
   direccion         String?
   esConsumidorFinal Boolean  @default(true)
+  // DETAL: cliente normal. MAYORISTA: tendero/revendedor, se le ofrece precioMayorista en el POS.
+  tipoCliente       String   @default("DETAL")
+  // Cartera / fiado: cuánto se le puede fiar como máximo (0 = no se le fía),
+  // cuánto debe hoy, y en cuántos días se considera vencida una venta a crédito.
+  limiteCredito     Float    @default(0)
+  saldoPendiente    Float    @default(0)
+  diasPlazoCredito  Int      @default(30)
   createdAt         DateTime @default(now())
 
   ventas            Venta[]
+  movimientosCuenta CuentaCorrienteMovimiento[]
 
   @@unique([tipoDocumento, numeroDocumento])
 }
 
+// Libro de fiado: cada venta a crédito genera un CARGO, cada pago del cliente
+// genera un ABONO. El saldo de Cliente.saldoPendiente es la caché del balance;
+// esta tabla es el historial auditable (quién fio, quién recibió el abono, cuándo).
+model CuentaCorrienteMovimiento {
+  id              Int      @id @default(autoincrement())
+  clienteId       Int
+  cliente         Cliente  @relation(fields: [clienteId], references: [id])
+  tipo            String // CARGO | ABONO | AJUSTE
+  monto           Float
+  saldoResultante Float
+  ventaId         Int?
+  venta           Venta?   @relation(fields: [ventaId], references: [id])
+  metodoPago      String? // método con el que se recibió el abono (EFECTIVO, TRANSFERENCIA, etc.)
+  motivo          String?
+  usuarioId       Int
+  usuario         Usuario  @relation(fields: [usuarioId], references: [id])
+  createdAt       DateTime @default(now())
+
+  @@index([clienteId])
+  @@index([createdAt])
+}
+
 model Venta {
-  id                Int      @id @default(autoincrement())
-  numero            Int
-  prefijo           String   @default("POS")
-  clienteId         Int?
-  cliente           Cliente? @relation(fields: [clienteId], references: [id])
-  usuarioId         Int
-  usuario           Usuario  @relation(fields: [usuarioId], references: [id])
-  subtotal          Float
-  descuento         Float    @default(0)
-  ivaTotal          Float    @default(0)
-  total             Float
-  metodoPago        String   @default("EFECTIVO") // EFECTIVO | TARJETA | TRANSFERENCIA | MIXTO
-  efectivoRecibido  Float?
-  cambio            Float?
-  estado            String   @default("COMPLETADA") // COMPLETADA | ANULADA
+  id               Int      @id @default(autoincrement())
+  numero           Int
+  prefijo          String   @default("POS")
+  clienteId        Int?
+  cliente          Cliente? @relation(fields: [clienteId], references: [id])
+  usuarioId        Int
+  usuario          Usuario  @relation(fields: [usuarioId], references: [id])
+  subtotal         Float
+  descuento        Float    @default(0)
+  ivaTotal         Float    @default(0)
+  total            Float
+  metodoPago       String   @default("EFECTIVO") // EFECTIVO | TARJETA | TRANSFERENCIA | MIXTO | CREDITO (fiado)
+  efectivoRecibido Float?
+  cambio           Float?
+  estado           String   @default("COMPLETADA") // COMPLETADA | ANULADA
   // DOCUMENTO_POS: documento equivalente POS (válido para ventas de poco valor sin factura electrónica).
   // FACTURA_ELECTRONICA: factura electrónica de venta ante la DIAN (requiere proveedor tecnológico habilitado).
-  tipoDocumento     String   @default("DOCUMENTO_POS")
+  tipoDocumento    String   @default("DOCUMENTO_POS")
   // Campos que solo se llenan si se emitió factura electrónica vía proveedor DIAN
-  cufe              String?
-  urlQr             String?
-  proveedorFactura  String?
-  motivoAnulacion   String?
-  createdAt         DateTime @default(now())
+  cufe             String?
+  urlQr            String?
+  proveedorFactura String?
+  motivoAnulacion  String?
+  createdAt        DateTime @default(now())
 
   items             VentaItem[]
   movimientos       MovimientoInventario[]
+  movimientosCuenta CuentaCorrienteMovimiento[]
 
   @@unique([prefijo, numero])
   @@index([createdAt])
 }
 
 model VentaItem {
-  id              Int      @id @default(autoincrement())
-  ventaId         Int
-  venta           Venta    @relation(fields: [ventaId], references: [id])
-  productoId      Int
-  producto        Producto @relation(fields: [productoId], references: [id])
-  nombreProducto  String
-  cantidad        Float
-  precioUnitario  Float
-  ivaTasa         Int      @default(0)
-  descuento       Float    @default(0)
-  subtotal        Float
+  id                 Int       @id @default(autoincrement())
+  ventaId            Int
+  venta              Venta     @relation(fields: [ventaId], references: [id])
+  // productoId es null para "productos libres": ítems agregados a mano en el
+  // momento de la venta (algo que no está en el catálogo). No descuentan
+  // inventario ni generan movimiento.
+  productoId         Int?
+  producto           Producto? @relation(fields: [productoId], references: [id])
+  nombreProducto     String
+  cantidad           Float
+  precioUnitario     Float
+  // Costo de referencia solo para productos libres (para no perder el cálculo
+  // de ganancia en los reportes). Para productos del catálogo se usa producto.precioCosto.
+  costoUnitarioLibre Float?
+  ivaTasa            Int       @default(0)
+  descuento          Float     @default(0)
+  subtotal           Float
 }
 
 // Configuración global de la tienda (singleton, siempre id = 1)
 model Configuracion {
-  id                                Int       @id @default(1)
-  nombreNegocio                     String    @default("San Miguel")
-  nit                               String?
-  direccion                         String    @default("Cra 43 con Calle 8, Mercado de Barranquilla")
-  telefono                          String?
-  ciudad                            String    @default("Barranquilla")
+  id                               Int       @id @default(1)
+  nombreNegocio                    String    @default("San Miguel")
+  nit                              String?
+  direccion                        String    @default("Cra 43 con Calle 8, Mercado de Barranquilla")
+  telefono                         String?
+  ciudad                           String    @default("Barranquilla")
   // Resolución de numeración de facturación DIAN (Resolución de Facturación vigente)
-  resolucionDianNumero              String?
-  resolucionDianPrefijo             String?
-  resolucionDianDesde               Int?
-  resolucionDianHasta               Int?
-  resolucionDianVigenciaDesde       DateTime?
-  resolucionDianVigenciaHasta       DateTime?
-  facturacionElectronicaHabilitada  Boolean   @default(false)
-  proveedorFacturacion              String    @default("NINGUNO") // NINGUNO | FACTUS
-  proveedorApiUrl                   String?
-  proveedorApiKey                   String?
-  proveedorApiSecret                String?
-  formatoRecibo                     String    @default("80MM") // 58MM | 80MM
+  resolucionDianNumero             String?
+  resolucionDianPrefijo            String?
+  resolucionDianDesde              Int?
+  resolucionDianHasta              Int?
+  resolucionDianVigenciaDesde      DateTime?
+  resolucionDianVigenciaHasta      DateTime?
+  facturacionElectronicaHabilitada Boolean   @default(false)
+  proveedorFacturacion             String    @default("NINGUNO") // NINGUNO | FACTUS
+  proveedorApiUrl                  String?
+  proveedorApiKey                  String?
+  proveedorApiSecret               String?
+  formatoRecibo                    String    @default("80MM") // 58MM | 80MM
+
+  // Identifica el tipo de negocio (uso informativo/futuras plantillas, no
+  // condiciona la lógica: la misma app sirve para salsamentaria, minimercado,
+  // ropa, calzado, etc.)
+  tipoNegocio String @default("OTRO")
+
+  // Cartera / fiado
+  limiteCreditoPorDefecto    Float @default(0)
+  diasPlazoCreditoPorDefecto Int   @default(30)
+  diasParaVencido            Int   @default(30)
+
+  // Protección de margen: por debajo de este % de ganancia sobre el costo,
+  // el POS resalta la línea/venta en la interfaz para que el cajero lo piense dos veces.
+  margenAlertaPct          Float @default(8)
+  // Tope de descuento que un CAJERO puede aplicar sin ser ADMIN (en %).
+  descuentoMaximoCajeroPct Float @default(5)
 }

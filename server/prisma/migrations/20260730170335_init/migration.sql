@@ -25,6 +25,7 @@ CREATE TABLE "Producto" (
     "unidad" TEXT NOT NULL DEFAULT 'UNIDAD',
     "precioCosto" REAL NOT NULL DEFAULT 0,
     "precioVenta" REAL NOT NULL,
+    "precioMayorista" REAL,
     "ivaTasa" INTEGER NOT NULL DEFAULT 0,
     "stock" REAL NOT NULL DEFAULT 0,
     "stockMinimo" REAL NOT NULL DEFAULT 0,
@@ -61,7 +62,28 @@ CREATE TABLE "Cliente" (
     "email" TEXT,
     "direccion" TEXT,
     "esConsumidorFinal" BOOLEAN NOT NULL DEFAULT true,
+    "tipoCliente" TEXT NOT NULL DEFAULT 'DETAL',
+    "limiteCredito" REAL NOT NULL DEFAULT 0,
+    "saldoPendiente" REAL NOT NULL DEFAULT 0,
+    "diasPlazoCredito" INTEGER NOT NULL DEFAULT 30,
     "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- CreateTable
+CREATE TABLE "CuentaCorrienteMovimiento" (
+    "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    "clienteId" INTEGER NOT NULL,
+    "tipo" TEXT NOT NULL,
+    "monto" REAL NOT NULL,
+    "saldoResultante" REAL NOT NULL,
+    "ventaId" INTEGER,
+    "metodoPago" TEXT,
+    "motivo" TEXT,
+    "usuarioId" INTEGER NOT NULL,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "CuentaCorrienteMovimiento_clienteId_fkey" FOREIGN KEY ("clienteId") REFERENCES "Cliente" ("id") ON DELETE RESTRICT ON UPDATE CASCADE,
+    CONSTRAINT "CuentaCorrienteMovimiento_ventaId_fkey" FOREIGN KEY ("ventaId") REFERENCES "Venta" ("id") ON DELETE SET NULL ON UPDATE CASCADE,
+    CONSTRAINT "CuentaCorrienteMovimiento_usuarioId_fkey" FOREIGN KEY ("usuarioId") REFERENCES "Usuario" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
 );
 
 -- CreateTable
@@ -93,15 +115,16 @@ CREATE TABLE "Venta" (
 CREATE TABLE "VentaItem" (
     "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
     "ventaId" INTEGER NOT NULL,
-    "productoId" INTEGER NOT NULL,
+    "productoId" INTEGER,
     "nombreProducto" TEXT NOT NULL,
     "cantidad" REAL NOT NULL,
     "precioUnitario" REAL NOT NULL,
+    "costoUnitarioLibre" REAL,
     "ivaTasa" INTEGER NOT NULL DEFAULT 0,
     "descuento" REAL NOT NULL DEFAULT 0,
     "subtotal" REAL NOT NULL,
     CONSTRAINT "VentaItem_ventaId_fkey" FOREIGN KEY ("ventaId") REFERENCES "Venta" ("id") ON DELETE RESTRICT ON UPDATE CASCADE,
-    CONSTRAINT "VentaItem_productoId_fkey" FOREIGN KEY ("productoId") REFERENCES "Producto" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
+    CONSTRAINT "VentaItem_productoId_fkey" FOREIGN KEY ("productoId") REFERENCES "Producto" ("id") ON DELETE SET NULL ON UPDATE CASCADE
 );
 
 -- CreateTable
@@ -123,7 +146,13 @@ CREATE TABLE "Configuracion" (
     "proveedorApiUrl" TEXT,
     "proveedorApiKey" TEXT,
     "proveedorApiSecret" TEXT,
-    "formatoRecibo" TEXT NOT NULL DEFAULT '80MM'
+    "formatoRecibo" TEXT NOT NULL DEFAULT '80MM',
+    "tipoNegocio" TEXT NOT NULL DEFAULT 'OTRO',
+    "limiteCreditoPorDefecto" REAL NOT NULL DEFAULT 0,
+    "diasPlazoCreditoPorDefecto" INTEGER NOT NULL DEFAULT 30,
+    "diasParaVencido" INTEGER NOT NULL DEFAULT 30,
+    "margenAlertaPct" REAL NOT NULL DEFAULT 8,
+    "descuentoMaximoCajeroPct" REAL NOT NULL DEFAULT 5
 );
 
 -- CreateIndex
@@ -146,6 +175,12 @@ CREATE INDEX "MovimientoInventario_createdAt_idx" ON "MovimientoInventario"("cre
 
 -- CreateIndex
 CREATE UNIQUE INDEX "Cliente_tipoDocumento_numeroDocumento_key" ON "Cliente"("tipoDocumento", "numeroDocumento");
+
+-- CreateIndex
+CREATE INDEX "CuentaCorrienteMovimiento_clienteId_idx" ON "CuentaCorrienteMovimiento"("clienteId");
+
+-- CreateIndex
+CREATE INDEX "CuentaCorrienteMovimiento_createdAt_idx" ON "CuentaCorrienteMovimiento"("createdAt");
 
 -- CreateIndex
 CREATE INDEX "Venta_createdAt_idx" ON "Venta"("createdAt");
