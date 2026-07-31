@@ -17,6 +17,10 @@ export function Ventas() {
   const [detalle, setDetalle] = useState<Venta | null>(null);
   const [motivoAnulacion, setMotivoAnulacion] = useState("");
   const [anulando, setAnulando] = useState(false);
+  const [devolverAbierto, setDevolverAbierto] = useState(false);
+  const [cantidadesDevolver, setCantidadesDevolver] = useState<Record<number, string>>({});
+  const [motivoDevolucion, setMotivoDevolucion] = useState("");
+  const [devolviendo, setDevolviendo] = useState(false);
 
   async function cargar() {
     const data = await api.get<Venta[]>("/ventas");
@@ -31,6 +35,9 @@ export function Ventas() {
   async function verDetalle(id: number) {
     const venta = await api.get<Venta>(`/ventas/${id}`);
     setDetalle(venta);
+    setDevolverAbierto(false);
+    setCantidadesDevolver({});
+    setMotivoDevolucion("");
   }
 
   async function anular() {
@@ -49,6 +56,36 @@ export function Ventas() {
       notificar(err instanceof ApiError ? err.message : "No se pudo anular la venta", "error");
     } finally {
       setAnulando(false);
+    }
+  }
+
+  async function devolver() {
+    if (!detalle) return;
+    if (!motivoDevolucion.trim()) {
+      notificar("Escribe el motivo de la devolución", "error");
+      return;
+    }
+    const items = Object.entries(cantidadesDevolver)
+      .map(([ventaItemId, cantidad]) => ({ ventaItemId: Number(ventaItemId), cantidad: Number(cantidad) }))
+      .filter((i) => i.cantidad > 0);
+    if (items.length === 0) {
+      notificar("Ingresa al menos una cantidad a devolver", "error");
+      return;
+    }
+    setDevolviendo(true);
+    try {
+      await api.post(`/ventas/${detalle.id}/devolucion`, { items, motivo: motivoDevolucion });
+      notificar("Devolución registrada y stock repuesto", "exito");
+      const actualizado = await api.get<Venta>(`/ventas/${detalle.id}`);
+      setDetalle(actualizado);
+      setDevolverAbierto(false);
+      setCantidadesDevolver({});
+      setMotivoDevolucion("");
+      cargar();
+    } catch (err) {
+      notificar(err instanceof ApiError ? err.message : "No se pudo registrar la devolución", "error");
+    } finally {
+      setDevolviendo(false);
     }
   }
 
@@ -187,9 +224,72 @@ export function Ventas() {
                 </button>
               )}
 
+              {detalle.totalDevuelto > 0 && (
+                <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-800">
+                  Ya se han devuelto {formatoMoneda.format(detalle.totalDevuelto)} de esta venta.
+                </p>
+              )}
+
+              {detalle.estado === "COMPLETADA" && usuario?.rol === "ADMIN" && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+                  <button
+                    onClick={() => setDevolverAbierto((v) => !v)}
+                    className="mb-2 flex w-full items-center justify-between text-sm font-semibold text-amber-800"
+                  >
+                    <span>Devolución parcial (solo algunos ítems)</span>
+                    <span>{devolverAbierto ? "▲" : "▼"}</span>
+                  </button>
+                  {devolverAbierto && (
+                    <>
+                      <div className="mb-2 flex flex-col gap-2">
+                        {detalle.items.map((item) => {
+                          const disponible = item.cantidad - item.cantidadDevuelta;
+                          if (disponible <= 0) return null;
+                          return (
+                            <div key={item.id} className="flex items-center justify-between gap-2 text-xs">
+                              <span className="flex-1">
+                                {item.nombreProducto}
+                                <span className="text-stone-400"> (disponible: {disponible})</span>
+                              </span>
+                              <input
+                                type="number"
+                                min={0}
+                                max={disponible}
+                                placeholder="0"
+                                value={cantidadesDevolver[item.id] ?? ""}
+                                onChange={(e) =>
+                                  setCantidadesDevolver((prev) => ({ ...prev, [item.id]: e.target.value }))
+                                }
+                                className="w-16 rounded border border-stone-300 px-1.5 py-1"
+                              />
+                            </div>
+                          );
+                        })}
+                        {detalle.items.every((item) => item.cantidad - item.cantidadDevuelta <= 0) && (
+                          <p className="text-xs text-stone-400">Ya se devolvió todo lo de esta venta.</p>
+                        )}
+                      </div>
+                      <input
+                        value={motivoDevolucion}
+                        onChange={(e) => setMotivoDevolucion(e.target.value)}
+                        placeholder="Motivo de la devolución..."
+                        className="mb-2 w-full rounded border border-amber-300 px-2 py-1.5 text-sm"
+                      />
+                      <button
+                        onClick={devolver}
+                        disabled={devolviendo}
+                        className="w-full rounded-lg bg-amber-700 py-2 font-semibold text-white disabled:opacity-50"
+                      >
+                        Registrar devolución
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+
               {detalle.estado === "COMPLETADA" && usuario?.rol === "ADMIN" && (
                 <div className="rounded-lg border border-red-200 bg-red-50 p-3">
-                  <p className="mb-2 text-sm font-semibold text-red-700">Anular venta</p>
+                  <p className="mb-2 text-sm font-semibold text-red-700">Anular venta (deshace toda la venta)</p>
                   <input
                     value={motivoAnulacion}
                     onChange={(e) => setMotivoAnulacion(e.target.value)}

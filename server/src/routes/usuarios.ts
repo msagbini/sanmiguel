@@ -17,9 +17,9 @@ router.get("/", async (_req, res) => {
 });
 
 const crearSchema = z.object({
-  nombre: z.string().min(1),
-  email: z.string().email(),
-  password: z.string().min(6),
+  nombre: z.string().min(1).max(200),
+  email: z.string().email().max(254),
+  password: z.string().min(6).max(200),
   rol: z.enum(ROLES),
 });
 
@@ -40,10 +40,10 @@ router.post("/", async (req, res) => {
 });
 
 const actualizarSchema = z.object({
-  nombre: z.string().min(1).optional(),
+  nombre: z.string().min(1).max(200).optional(),
   rol: z.enum(ROLES).optional(),
   activo: z.boolean().optional(),
-  password: z.string().min(6).optional(),
+  password: z.string().min(6).max(200).optional(),
 });
 
 router.put("/:id", async (req, res) => {

@@ -10,6 +10,7 @@ import { Productos } from "./pages/Productos";
 import { Inventario } from "./pages/Inventario";
 import { Clientes } from "./pages/Clientes";
 import { Cartera } from "./pages/Cartera";
+import { CuentasPorPagar } from "./pages/CuentasPorPagar";
 import { Reportes } from "./pages/Reportes";
 import { Configuracion } from "./pages/Configuracion";
 
@@ -47,6 +48,14 @@ function App() {
               />
               <Route path="/clientes" element={<Clientes />} />
               <Route path="/cartera" element={<Cartera />} />
+              <Route
+                path="/cuentas-por-pagar"
+                element={
+                  <ProtectedRoute rolesPermitidos={["ADMIN"]}>
+                    <CuentasPorPagar />
+                  </ProtectedRoute>
+                }
+              />
               <Route
                 path="/reportes"
                 element={

@@ -14,7 +14,7 @@ router.get("/", async (_req, res) => {
   res.json(categorias);
 });
 
-const schema = z.object({ nombre: z.string().min(1) });
+const schema = z.object({ nombre: z.string().trim().min(1).max(200) });
 
 router.post("/", requireRole("ADMIN"), async (req, res) => {
   const parsed = schema.safeParse(req.body);

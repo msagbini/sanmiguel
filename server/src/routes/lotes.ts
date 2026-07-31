@@ -47,7 +47,7 @@ router.get("/resumen", async (req, res) => {
   res.json({ porVencer, vencidos });
 });
 
-const darDeBajaSchema = z.object({ motivo: z.string().min(1) });
+const darDeBajaSchema = z.object({ motivo: z.string().trim().min(1).max(1000) });
 
 // Da de baja lo que quede de un lote (vencido o dañado): genera una SALIDA de
 // inventario y deja el lote en cero para que no vuelva a aparecer en las alertas.

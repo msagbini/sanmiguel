@@ -11,6 +11,7 @@ import {
   Settings,
   Menu,
   LogOut,
+  Truck,
 } from "lucide-react";
 import { useAuth } from "../AuthContext";
 import { AlertBell } from "./AlertBell";
@@ -21,6 +22,7 @@ const NAV: { to: string; label: string; icon: typeof ShoppingCart; roles: Rol[] 
   { to: "/", label: "Punto de venta", icon: ShoppingCart, roles: ["ADMIN", "CAJERO"] },
   { to: "/ventas", label: "Ventas", icon: Receipt, roles: ["ADMIN", "CAJERO"] },
   { to: "/cartera", label: "Cartera (fiado)", icon: CreditCard, roles: ["ADMIN", "CAJERO"] },
+  { to: "/cuentas-por-pagar", label: "Cuentas por pagar", icon: Truck, roles: ["ADMIN"] },
   { to: "/productos", label: "Productos", icon: Package, roles: ["ADMIN"] },
   { to: "/inventario", label: "Inventario", icon: BarChart3, roles: ["ADMIN"] },
   { to: "/clientes", label: "Clientes", icon: Users, roles: ["ADMIN", "CAJERO"] },
@@ -62,7 +64,7 @@ export function Layout() {
               <p className="text-[11px] text-brand-100/70">Inventario y ventas</p>
             </div>
           </div>
-          <AlertBell />
+          <AlertBell align="left" />
         </div>
         <TurnoWidget />
         <div className="flex flex-1 flex-col gap-1 px-3 py-2">

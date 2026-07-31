@@ -25,6 +25,8 @@ model Usuario {
   movimientosCuenta         CuentaCorrienteMovimiento[]
   turnos                    Turno[]
   estudiosCreditoAprobados  Cliente[]                   @relation("EstudioCreditoAprobador")
+  devoluciones              Devolucion[]
+  movimientosProveedor      MovimientoCuentaProveedor[]
 }
 
 model Categoria {
@@ -35,15 +37,39 @@ model Categoria {
 
 // Proveedor del que se compra un producto. Se reutiliza entre productos (no
 // se repite nombre/teléfono a mano en cada uno), pensado para saber a quién
-// llamar cuando algo se agota o llegó dañado.
+// llamar cuando algo se agota o llegó dañado. También lleva cuentas por
+// pagar: cuánto se le debe (por mercancía recibida a crédito) y los pagos
+// que se le van haciendo, como espejo de la cartera de clientes.
 model Proveedor {
-  id        Int        @id @default(autoincrement())
-  nombre    String     @unique
-  telefono  String?
-  direccion String?
-  notas     String?
-  createdAt DateTime   @default(now())
-  productos Producto[]
+  id             Int        @id @default(autoincrement())
+  nombre         String     @unique
+  telefono       String?
+  direccion      String?
+  notas          String?
+  saldoPendiente Float      @default(0)
+  createdAt      DateTime   @default(now())
+  productos      Producto[]
+
+  movimientosCuenta MovimientoCuentaProveedor[]
+}
+
+// Cuentas por pagar: cada compra a crédito genera un CARGO, cada pago que se
+// le hace al proveedor genera un ABONO. Espejo de CuentaCorrienteMovimiento
+// pero del lado de lo que el negocio debe, no de lo que le deben.
+model MovimientoCuentaProveedor {
+  id              Int       @id @default(autoincrement())
+  proveedorId     Int
+  proveedor       Proveedor @relation(fields: [proveedorId], references: [id])
+  tipo            String // CARGO | ABONO | AJUSTE
+  monto           Float
+  saldoResultante Float
+  motivo          String?
+  usuarioId       Int
+  usuario         Usuario   @relation(fields: [usuarioId], references: [id])
+  createdAt       DateTime  @default(now())
+
+  @@index([proveedorId])
+  @@index([createdAt])
 }
 
 model Producto {
@@ -249,12 +275,51 @@ model Venta {
   turno            Turno?   @relation(fields: [turnoId], references: [id])
   createdAt        DateTime @default(now())
 
+  // Suma acumulada de lo devuelto en devoluciones parciales (ver Devolucion).
+  // El total original NUNCA se modifica (es el registro histórico de lo que
+  // se vendió); esto permite ver cuánto de esa venta sigue vigente sin
+  // perder el dato original para auditoría/reportes.
+  totalDevuelto Float @default(0)
+
   items             VentaItem[]
   movimientos       MovimientoInventario[]
   movimientosCuenta CuentaCorrienteMovimiento[]
+  devoluciones      Devolucion[]
 
   @@unique([prefijo, numero])
   @@index([createdAt])
+}
+
+// Devolución parcial de una venta ya completada: a diferencia de anular (que
+// deshace TODA la venta), esto permite devolver solo algunos ítems/cantidades
+// (ej. el cliente devuelve 2 de los 5 que compró porque venían dañados) sin
+// tocar el resto de la venta. Restaura el stock de lo devuelto y, si la venta
+// era fiada, reduce la deuda del cliente en la parte proporcional.
+model Devolucion {
+  id        Int              @id @default(autoincrement())
+  ventaId   Int
+  venta     Venta            @relation(fields: [ventaId], references: [id])
+  monto     Float
+  motivo    String
+  usuarioId Int
+  usuario   Usuario          @relation(fields: [usuarioId], references: [id])
+  // Turno en que se hizo la devolución (no necesariamente el mismo turno en
+  // que se hizo la venta original). Sirve para saber cuánto efectivo hay que
+  // restar del arqueo de ESTE turno si se le devolvió plata en mano a alguien.
+  turnoId   Int?
+  turno     Turno?           @relation(fields: [turnoId], references: [id])
+  createdAt DateTime         @default(now())
+  items     DevolucionItem[]
+}
+
+model DevolucionItem {
+  id           Int        @id @default(autoincrement())
+  devolucionId Int
+  devolucion   Devolucion @relation(fields: [devolucionId], references: [id])
+  ventaItemId  Int
+  ventaItem    VentaItem  @relation(fields: [ventaItemId], references: [id])
+  cantidad     Float
+  monto        Float
 }
 
 // Turno de caja: se abre con una base (fondo inicial) y se cierra contando el
@@ -276,6 +341,7 @@ model Turno {
 
   ventas            Venta[]
   movimientosCuenta CuentaCorrienteMovimiento[]
+  devoluciones      Devolucion[]
 }
 
 model VentaItem {
@@ -296,6 +362,12 @@ model VentaItem {
   ivaTasa            Int       @default(0)
   descuento          Float     @default(0)
   subtotal           Float
+  // Cuánto de la cantidad original ya se devolvió (ver Devolucion). Nunca
+  // puede superar `cantidad`; se usa para no dejar devolver más de lo que
+  // realmente se vendió en esa línea.
+  cantidadDevuelta   Float     @default(0)
+
+  devolucionItems DevolucionItem[]
 }
 
 // Configuración global de la tienda (singleton, siempre id = 1)

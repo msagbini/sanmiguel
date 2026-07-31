@@ -50,6 +50,8 @@ export function Clientes() {
   const [detalle, setDetalle] = useState<Cliente | null>(null);
   const [formCodeudor, setFormCodeudor] = useState(CODEUDOR_VACIO);
   const [formReferencia, setFormReferencia] = useState(REFERENCIA_VACIA);
+  const [montoAjuste, setMontoAjuste] = useState("");
+  const [motivoAjuste, setMotivoAjuste] = useState("");
   const esAdmin = usuario?.rol === "ADMIN";
 
   async function cargar(q = "") {
@@ -90,6 +92,8 @@ export function Clientes() {
     }
     setFormCodeudor(CODEUDOR_VACIO);
     setFormReferencia(REFERENCIA_VACIA);
+    setMontoAjuste("");
+    setMotivoAjuste("");
     setModalAbierto(c);
   }
 
@@ -195,6 +199,29 @@ export function Clientes() {
       notificar("Estudio de crédito revocado. El cupo de fiado quedó en 0.", "exito");
     } catch (err) {
       notificar(err instanceof ApiError ? err.message : "No se pudo revocar el estudio", "error");
+    }
+  }
+
+  async function registrarAjuste() {
+    if (!detalle) return;
+    const monto = Number(montoAjuste);
+    if (!monto) {
+      notificar("Ingresa un monto distinto de 0", "error");
+      return;
+    }
+    if (!motivoAjuste.trim()) {
+      notificar("Escribe el motivo del ajuste", "error");
+      return;
+    }
+    try {
+      await api.post(`/clientes/${detalle.id}/ajustes`, { monto, motivo: motivoAjuste });
+      await cargarDetalle(detalle.id);
+      cargar(busqueda);
+      setMontoAjuste("");
+      setMotivoAjuste("");
+      notificar("Saldo ajustado", "exito");
+    } catch (err) {
+      notificar(err instanceof ApiError ? err.message : "No se pudo aplicar el ajuste", "error");
     }
   }
 
@@ -349,6 +376,38 @@ export function Clientes() {
                   />
                 </label>
               </div>
+
+              {modalAbierto !== "nuevo" && detalle && esAdmin && (
+                <div className="rounded-lg border border-stone-200 bg-stone-50 p-3">
+                  <p className="mb-1 text-xs font-semibold uppercase text-stone-500">Ajuste manual de saldo</p>
+                  <p className="mb-2 text-xs text-stone-500">
+                    Para dejar registrada una deuda que ya existía antes de usar la app, o corregir un error. Debe
+                    actual: {formatoMoneda.format(detalle.saldoPendiente)}. No abre cupo de fiado nuevo.
+                  </p>
+                  <div className="flex gap-2">
+                    <input
+                      type="number"
+                      value={montoAjuste}
+                      onChange={(e) => setMontoAjuste(e.target.value)}
+                      placeholder="Monto (+ suma deuda, - la resta)"
+                      className="w-40 rounded-lg border border-stone-300 px-2 py-1.5 text-xs"
+                    />
+                    <input
+                      value={motivoAjuste}
+                      onChange={(e) => setMotivoAjuste(e.target.value)}
+                      placeholder="Motivo del ajuste..."
+                      className="flex-1 rounded-lg border border-stone-300 px-2 py-1.5 text-xs"
+                    />
+                    <button
+                      onClick={registrarAjuste}
+                      type="button"
+                      className="whitespace-nowrap rounded-lg bg-stone-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-stone-800"
+                    >
+                      Aplicar
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {modalAbierto !== "nuevo" && detalle && (
                 <div className="rounded-lg border border-stone-200 bg-stone-50 p-3">

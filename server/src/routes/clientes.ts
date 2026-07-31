@@ -30,14 +30,14 @@ router.get("/", async (req, res) => {
 
 const schema = z.object({
   tipoDocumento: z.enum(TIPOS_DOCUMENTO_CLIENTE),
-  numeroDocumento: z.string().min(1),
-  nombre: z.string().min(1),
-  telefono: z.string().nullish(),
-  email: z.string().email().nullish().or(z.literal("")),
-  direccion: z.string().nullish(),
+  numeroDocumento: z.string().trim().min(1).max(50),
+  nombre: z.string().trim().min(1).max(200),
+  telefono: z.string().max(50).nullish(),
+  email: z.string().email().max(254).nullish().or(z.literal("")),
+  direccion: z.string().max(300).nullish(),
   tipoCliente: z.enum(TIPOS_CLIENTE).optional(),
-  limiteCredito: z.number().min(0).optional(),
-  diasPlazoCredito: z.number().int().min(1).optional(),
+  limiteCredito: z.number().min(0).finite().max(1_000_000_000).optional(),
+  diasPlazoCredito: z.number().int().min(1).max(3650).optional(),
 });
 
 router.post("/", async (req, res) => {
@@ -95,12 +95,12 @@ router.get("/:id", async (req, res) => {
 });
 
 const codeudorSchema = z.object({
-  nombre: z.string().min(1),
+  nombre: z.string().trim().min(1).max(200),
   tipoDocumento: z.enum(TIPOS_DOCUMENTO_CLIENTE).optional(),
-  numeroDocumento: z.string().min(1),
-  telefono: z.string().min(1),
-  direccion: z.string().nullish(),
-  parentesco: z.string().nullish(),
+  numeroDocumento: z.string().trim().min(1).max(50),
+  telefono: z.string().trim().min(1).max(50),
+  direccion: z.string().max(300).nullish(),
+  parentesco: z.string().max(100).nullish(),
 });
 
 router.post("/:id/codeudores", requireRole("ADMIN"), async (req, res) => {
@@ -115,16 +115,20 @@ router.post("/:id/codeudores", requireRole("ADMIN"), async (req, res) => {
 
 router.delete("/:id/codeudores/:codeudorId", requireRole("ADMIN"), async (req, res) => {
   const clienteId = Number(req.params.id);
-  await prisma.codeudor.delete({ where: { id: Number(req.params.codeudorId) } });
+  // Filtrar también por clienteId (no solo por el id del codeudor): sin esto,
+  // la URL de un cliente permitiría borrar el codeudor de otro cliente
+  // distinto con solo cambiar el id en la ruta.
+  const { count } = await prisma.codeudor.deleteMany({ where: { id: Number(req.params.codeudorId), clienteId } });
+  if (count === 0) return res.status(404).json({ error: "Codeudor no encontrado para este cliente" });
   await revocarSiYaNoCalifica(clienteId);
   res.status(204).end();
 });
 
 const referenciaSchema = z.object({
   tipo: z.enum(TIPOS_REFERENCIA).optional(),
-  nombre: z.string().min(1),
-  telefono: z.string().min(1),
-  relacion: z.string().nullish(),
+  nombre: z.string().trim().min(1).max(200),
+  telefono: z.string().trim().min(1).max(50),
+  relacion: z.string().max(100).nullish(),
 });
 
 router.post("/:id/referencias", requireRole("ADMIN"), async (req, res) => {
@@ -139,7 +143,10 @@ router.post("/:id/referencias", requireRole("ADMIN"), async (req, res) => {
 
 router.delete("/:id/referencias/:referenciaId", requireRole("ADMIN"), async (req, res) => {
   const clienteId = Number(req.params.id);
-  await prisma.referenciaCliente.delete({ where: { id: Number(req.params.referenciaId) } });
+  const { count } = await prisma.referenciaCliente.deleteMany({
+    where: { id: Number(req.params.referenciaId), clienteId },
+  });
+  if (count === 0) return res.status(404).json({ error: "Referencia no encontrada para este cliente" });
   await revocarSiYaNoCalifica(clienteId);
   res.status(204).end();
 });
@@ -169,7 +176,7 @@ async function revocarSiYaNoCalifica(clienteId: number) {
 }
 
 const estudioAprobarSchema = z.object({
-  notas: z.string().nullish(),
+  notas: z.string().max(2000).nullish(),
 });
 
 router.post("/:id/estudio-credito/aprobar", requireRole("ADMIN"), async (req, res) => {
@@ -254,9 +261,9 @@ router.get("/:id/cuenta", async (req, res) => {
 });
 
 const abonoSchema = z.object({
-  monto: z.number().positive(),
-  metodoPago: z.string().default("EFECTIVO"),
-  motivo: z.string().optional(),
+  monto: z.number().positive().finite().max(1_000_000_000),
+  metodoPago: z.string().max(50).default("EFECTIVO"),
+  motivo: z.string().max(1000).optional(),
 });
 
 // Registrar un abono (pago) del cliente a su cuenta de fiado.
@@ -304,6 +311,63 @@ router.post("/:id/abonos", async (req, res) => {
     res.status(201).json(clienteActualizado);
   } catch (err) {
     if (err instanceof Error && err.message === "El abono es mayor que la deuda actual") {
+      return res.status(409).json({ error: err.message });
+    }
+    throw err;
+  }
+});
+
+const ajusteSaldoSchema = z.object({
+  // Positivo = aumenta la deuda (ej. registrar lo que ya debía antes de usar
+  // la app); negativo = la reduce (corrección, condonación parcial, etc.).
+  monto: z.number().finite().refine((v) => v !== 0, { message: "El monto no puede ser 0" }).refine((v) => Math.abs(v) <= 1_000_000_000, {
+    message: "Monto fuera de rango",
+  }),
+  motivo: z.string().trim().min(1).max(1000),
+});
+
+// Ajuste manual del saldo de un cliente: para dejar registrada una deuda que
+// ya existía antes de usar la app (o corregir un error), sin que eso pase
+// por una venta ni requiera el estudio de crédito completo — es solo dejar
+// constancia de una plata que ya se debe en la vida real, no está abriendo
+// cupo de fiado nuevo (limiteCredito no cambia con esto).
+router.post("/:id/ajustes", requireRole("ADMIN"), async (req, res) => {
+  const parsed = ajusteSaldoSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  const clienteId = Number(req.params.id);
+  const { monto, motivo } = parsed.data;
+
+  const cliente = await prisma.cliente.findUnique({ where: { id: clienteId } });
+  if (!cliente) return res.status(404).json({ error: "Cliente no encontrado" });
+
+  try {
+    const clienteActualizado = await prisma.$transaction(async (tx) => {
+      // Guarda atómica (mismo patrón que abonos): evita que este ajuste y una
+      // venta/abono concurrentes calculen el resultado sobre un saldo que ya
+      // quedó desactualizado.
+      const actualizacion = await tx.cliente.updateMany({
+        where: { id: clienteId, saldoPendiente: { gte: -monto } },
+        data: { saldoPendiente: { increment: monto } },
+      });
+      if (actualizacion.count === 0) {
+        throw new Error("El ajuste dejaría el saldo del cliente en negativo");
+      }
+      const actualizado = await tx.cliente.findUniqueOrThrow({ where: { id: clienteId } });
+      await tx.cuentaCorrienteMovimiento.create({
+        data: {
+          clienteId,
+          tipo: "AJUSTE",
+          monto,
+          saldoResultante: actualizado.saldoPendiente,
+          motivo,
+          usuarioId: req.user!.id,
+        },
+      });
+      return actualizado;
+    });
+    res.status(201).json(clienteActualizado);
+  } catch (err) {
+    if (err instanceof Error && err.message === "El ajuste dejaría el saldo del cliente en negativo") {
       return res.status(409).json({ error: err.message });
     }
     throw err;

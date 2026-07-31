@@ -13,6 +13,7 @@ const VENTA_INCLUDE = {
   items: { include: { producto: true } },
   cliente: true,
   usuario: { select: { nombre: true } },
+  devoluciones: { include: { items: true }, orderBy: { createdAt: "desc" as const } },
 } as const;
 
 // productoId ausente = "producto libre": algo que no está en el catálogo y se
@@ -349,7 +350,7 @@ router.post("/:id/facturar", requireRole("ADMIN"), async (req, res) => {
   res.json(resultado);
 });
 
-const anularSchema = z.object({ motivo: z.string().min(1) });
+const anularSchema = z.object({ motivo: z.string().trim().min(1).max(1000) });
 
 router.post("/:id/anular", requireRole("ADMIN"), async (req, res) => {
   const parsed = anularSchema.safeParse(req.body);
@@ -420,6 +421,141 @@ router.post("/:id/anular", requireRole("ADMIN"), async (req, res) => {
   }
 
   res.status(204).send();
+});
+
+const devolucionSchema = z.object({
+  items: z
+    .array(
+      z.object({
+        ventaItemId: z.number().int().positive(),
+        cantidad: z.number().positive().finite().max(100_000_000),
+      }),
+    )
+    .min(1)
+    .max(500),
+  motivo: z.string().trim().min(1).max(1000),
+});
+
+// Devolución parcial: a diferencia de anular (que deshace TODA la venta),
+// esto devuelve solo algunos ítems/cantidades puntuales sin tocar el resto.
+// Restaura el stock de lo devuelto y, si la venta era fiada, reduce la deuda
+// del cliente en la parte proporcional — pero el total original de la venta
+// nunca se modifica (queda como historial); lo devuelto se ve en
+// totalDevuelto y en el detalle de Devolucion.
+router.post("/:id/devolucion", requireRole("ADMIN"), async (req, res) => {
+  const parsed = devolucionSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  const ventaId = Number(req.params.id);
+
+  const venta = await prisma.venta.findUnique({ where: { id: ventaId }, include: { items: true } });
+  if (!venta) return res.status(404).json({ error: "Venta no encontrada" });
+  if (venta.estado === "ANULADA") {
+    return res.status(400).json({ error: "La venta está anulada, no se le pueden hacer devoluciones" });
+  }
+
+  const turnoAbierto = await prisma.turno.findFirst({ where: { cerradoEn: null } });
+  const itemsPorId = new Map(venta.items.map((i) => [i.id, i]));
+  for (const linea of parsed.data.items) {
+    const item = itemsPorId.get(linea.ventaItemId);
+    if (!item) {
+      return res.status(400).json({ error: `El ítem ${linea.ventaItemId} no pertenece a esta venta` });
+    }
+    const disponibleParaDevolver = item.cantidad - item.cantidadDevuelta;
+    if (linea.cantidad > disponibleParaDevolver) {
+      return res.status(400).json({
+        error: `"${item.nombreProducto}": solo quedan ${disponibleParaDevolver} disponibles para devolver de esa línea`,
+      });
+    }
+  }
+
+  try {
+    const devolucion = await prisma.$transaction(async (tx) => {
+      let montoTotal = 0;
+      const itemsData: { ventaItemId: number; cantidad: number; monto: number }[] = [];
+
+      for (const linea of parsed.data.items) {
+        const item = itemsPorId.get(linea.ventaItemId)!;
+        // Reparto proporcional del subtotal de la línea (ya incluye IVA y
+        // descuento tal como quedaron al momento de la venta), para no tener
+        // que recalcular impuestos/descuentos desde cero.
+        const montoLinea = (item.subtotal / item.cantidad) * linea.cantidad;
+        montoTotal += montoLinea;
+        itemsData.push({ ventaItemId: item.id, cantidad: linea.cantidad, monto: montoLinea });
+
+        // Guarda atómica: por si dos devoluciones de la misma línea llegan
+        // casi al mismo tiempo, no se puede devolver más de lo que quedaba.
+        const actualizacion = await tx.ventaItem.updateMany({
+          where: { id: item.id, cantidadDevuelta: { lte: item.cantidad - linea.cantidad } },
+          data: { cantidadDevuelta: { increment: linea.cantidad } },
+        });
+        if (actualizacion.count === 0) {
+          throw new Error(`CANTIDAD_INSUFICIENTE: "${item.nombreProducto}" ya no tiene esa cantidad disponible para devolver`);
+        }
+
+        if (item.productoId != null) {
+          await tx.producto.update({
+            where: { id: item.productoId },
+            data: { stock: { increment: linea.cantidad } },
+          });
+          await tx.movimientoInventario.create({
+            data: {
+              productoId: item.productoId,
+              tipo: "DEVOLUCION",
+              cantidad: linea.cantidad,
+              motivo: `Devolución parcial de venta #${venta.prefijo}-${venta.numero}: ${parsed.data.motivo}`,
+              usuarioId: req.user!.id,
+              ventaId: venta.id,
+            },
+          });
+        }
+      }
+
+      const nueva = await tx.devolucion.create({
+        data: {
+          ventaId: venta.id,
+          monto: montoTotal,
+          motivo: parsed.data.motivo,
+          usuarioId: req.user!.id,
+          turnoId: turnoAbierto?.id ?? null,
+          items: { create: itemsData },
+        },
+        include: { items: true },
+      });
+
+      await tx.venta.update({
+        where: { id: venta.id },
+        data: { totalDevuelto: { increment: montoTotal } },
+      });
+
+      if (venta.metodoPago === "CREDITO" && venta.clienteId) {
+        const clienteActualizado = await tx.cliente.update({
+          where: { id: venta.clienteId },
+          data: { saldoPendiente: { decrement: montoTotal } },
+        });
+        await tx.cuentaCorrienteMovimiento.create({
+          data: {
+            clienteId: clienteActualizado.id,
+            tipo: "AJUSTE",
+            monto: -montoTotal,
+            saldoResultante: clienteActualizado.saldoPendiente,
+            ventaId: venta.id,
+            motivo: `Devolución parcial de venta #${venta.prefijo}-${venta.numero}: ${parsed.data.motivo}`,
+            usuarioId: req.user!.id,
+          },
+        });
+      }
+
+      return nueva;
+    });
+
+    res.status(201).json(devolucion);
+  } catch (err) {
+    const mensaje = err instanceof Error ? err.message : "";
+    if (mensaje.startsWith("CANTIDAD_INSUFICIENTE:")) {
+      return res.status(409).json({ error: mensaje.replace("CANTIDAD_INSUFICIENTE: ", "") });
+    }
+    throw err;
+  }
 });
 
 export default router;

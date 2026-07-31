@@ -9,7 +9,7 @@ router.use(requireAuth);
 async function calcularResumen(turnoId: number) {
   const turno = await prisma.turno.findUniqueOrThrow({ where: { id: turnoId } });
 
-  const [ventasEfectivo, abonosEfectivo, numeroVentas] = await Promise.all([
+  const [ventasEfectivo, abonosEfectivo, devolucionesEfectivo, numeroVentas] = await Promise.all([
     prisma.venta.aggregate({
       where: { turnoId, estado: "COMPLETADA", metodoPago: "EFECTIVO" },
       _sum: { total: true },
@@ -18,14 +18,22 @@ async function calcularResumen(turnoId: number) {
       where: { turnoId, tipo: "ABONO", metodoPago: "EFECTIVO" },
       _sum: { monto: true },
     }),
+    // Si se le devuelve plata en mano a un cliente por una devolución (y la
+    // venta original era en efectivo), esa plata sale de la caja y hay que
+    // restarla de lo esperado — si no, el arqueo daría "sobrante" falso.
+    prisma.devolucion.aggregate({
+      where: { turnoId, venta: { metodoPago: "EFECTIVO" } },
+      _sum: { monto: true },
+    }),
     prisma.venta.count({ where: { turnoId, estado: "COMPLETADA" } }),
   ]);
 
   const totalVentasEfectivo = ventasEfectivo._sum.total ?? 0;
   const totalAbonosEfectivo = abonosEfectivo._sum.monto ?? 0;
-  const efectivoEsperado = turno.fondoInicial + totalVentasEfectivo + totalAbonosEfectivo;
+  const totalDevolucionesEfectivo = devolucionesEfectivo._sum.monto ?? 0;
+  const efectivoEsperado = turno.fondoInicial + totalVentasEfectivo + totalAbonosEfectivo - totalDevolucionesEfectivo;
 
-  return { turno, totalVentasEfectivo, totalAbonosEfectivo, efectivoEsperado, numeroVentas };
+  return { turno, totalVentasEfectivo, totalAbonosEfectivo, totalDevolucionesEfectivo, efectivoEsperado, numeroVentas };
 }
 
 router.get("/actual", async (_req, res) => {
@@ -47,7 +55,7 @@ router.get("/", async (_req, res) => {
   res.json(turnos);
 });
 
-const abrirSchema = z.object({ fondoInicial: z.number().min(0) });
+const abrirSchema = z.object({ fondoInicial: z.number().min(0).finite().max(1_000_000_000) });
 
 router.post("/abrir", async (req, res) => {
   const parsed = abrirSchema.safeParse(req.body);
@@ -62,7 +70,10 @@ router.post("/abrir", async (req, res) => {
   res.status(201).json(turno);
 });
 
-const cerrarSchema = z.object({ efectivoContado: z.number().min(0), notas: z.string().optional() });
+const cerrarSchema = z.object({
+  efectivoContado: z.number().min(0).finite().max(1_000_000_000),
+  notas: z.string().max(2000).optional(),
+});
 
 router.post("/:id/cerrar", async (req, res) => {
   const parsed = cerrarSchema.safeParse(req.body);

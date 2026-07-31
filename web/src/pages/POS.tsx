@@ -192,6 +192,22 @@ export function POS() {
     );
   }
 
+  // Escribir la cantidad a mano (en vez de tener que darle "+" uno por uno)
+  // para ventas al por mayor donde se llevan 20, 50, 100 unidades de una vez.
+  function establecerCantidad(key: string, valor: number) {
+    if (!Number.isFinite(valor) || valor <= 0) return;
+    setCarrito((prev) =>
+      prev.map((item) => {
+        if (item.key !== key) return item;
+        if (item.stockDisponible != null && valor > item.stockDisponible) {
+          notificar(`Solo quedan ${item.stockDisponible} unidades de ${item.nombre}`, "error");
+          return { ...item, cantidad: item.stockDisponible };
+        }
+        return { ...item, cantidad: valor };
+      })
+    );
+  }
+
   function actualizarPrecio(key: string, nuevoPrecio: number) {
     setCarrito((prev) => prev.map((item) => (item.key === key ? { ...item, precioUnitario: nuevoPrecio, precioManual: true } : item)));
   }
@@ -250,7 +266,6 @@ export function POS() {
     setEfectivoRecibido("");
     setMetodoPago("EFECTIVO");
     setDescuentoGlobalPct(0);
-    setDescuentoCustom("");
     setVentaCompletada(null);
     setTimeout(enfocar, 0);
   }
@@ -478,7 +493,14 @@ export function POS() {
               >
                 −
               </button>
-              <span className="w-6 text-center text-sm font-semibold">{item.cantidad}</span>
+              <input
+                type="number"
+                min={1}
+                value={item.cantidad}
+                onChange={(e) => establecerCantidad(item.key, Number(e.target.value))}
+                onFocus={(e) => e.target.select()}
+                className="w-12 rounded border border-stone-200 px-1 py-0.5 text-center text-sm font-semibold"
+              />
               <button
                 onClick={() => cambiarCantidad(item.key, 1)}
                 className="h-7 w-7 rounded-full bg-stone-200 font-bold text-stone-700 hover:bg-stone-300"

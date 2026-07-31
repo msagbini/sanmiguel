@@ -32,7 +32,32 @@ export interface Proveedor {
   telefono: string | null;
   direccion: string | null;
   notas: string | null;
+  saldoPendiente: number;
   _count?: { productos: number };
+}
+
+export type TipoMovimientoCuentaProveedor = "CARGO" | "ABONO" | "AJUSTE";
+
+export interface MovimientoCuentaProveedor {
+  id: number;
+  proveedorId: number;
+  tipo: TipoMovimientoCuentaProveedor;
+  monto: number;
+  saldoResultante: number;
+  motivo: string | null;
+  usuario?: { nombre: string };
+  createdAt: string;
+}
+
+export interface EstadoCuentaProveedor {
+  proveedor: Proveedor;
+  movimientos: MovimientoCuentaProveedor[];
+}
+
+export interface ResumenCuentasPorPagar {
+  total: number;
+  numeroProveedores: number;
+  proveedores: { proveedorId: number; nombre: string; telefono: string | null; saldoPendiente: number }[];
 }
 
 export interface Producto {
@@ -133,6 +158,24 @@ export interface VentaItem {
   ivaTasa: number;
   descuento: number;
   subtotal: number;
+  cantidadDevuelta: number;
+}
+
+export interface DevolucionItem {
+  id: number;
+  ventaItemId: number;
+  cantidad: number;
+  monto: number;
+}
+
+export interface Devolucion {
+  id: number;
+  ventaId: number;
+  monto: number;
+  motivo: string;
+  usuario?: { nombre: string };
+  createdAt: string;
+  items: DevolucionItem[];
 }
 
 export type TipoMovimientoCuenta = "CARGO" | "ABONO" | "AJUSTE";
@@ -201,6 +244,7 @@ export interface ResumenTurno {
   turno: Turno;
   totalVentasEfectivo: number;
   totalAbonosEfectivo: number;
+  totalDevolucionesEfectivo: number;
   efectivoEsperado: number;
   numeroVentas: number;
 }
@@ -225,8 +269,10 @@ export interface Venta {
   urlQr: string | null;
   proveedorFactura: string | null;
   motivoAnulacion: string | null;
+  totalDevuelto: number;
   createdAt: string;
   items: VentaItem[];
+  devoluciones: Devolucion[];
 }
 
 export interface Configuracion {

@@ -120,6 +120,12 @@ export function TurnoWidget() {
                   <span>{formatoMoneda.format(resumen.totalAbonosEfectivo)}</span>
                 </div>
               )}
+              {resumen.totalDevolucionesEfectivo > 0 && (
+                <div className="flex justify-between text-red-700">
+                  <span>Devoluciones en efectivo</span>
+                  <span>-{formatoMoneda.format(resumen.totalDevolucionesEfectivo)}</span>
+                </div>
+              )}
               <div className="flex justify-between font-bold">
                 <span>Esperado en caja</span>
                 <span>{formatoMoneda.format(resumen.efectivoEsperado)}</span>

@@ -25,6 +25,8 @@ export function Inventario() {
   const [stockBajo, setStockBajo] = useState<Producto[]>([]);
   const [movimientos, setMovimientos] = useState<MovimientoInventario[]>([]);
   const [lotes, setLotes] = useState<LoteInventario[]>([]);
+  const [productos, setProductos] = useState<Producto[]>([]);
+  const [busquedaStock, setBusquedaStock] = useState("");
 
   async function cargarVencimientos() {
     const data = await api.get<LoteInventario[]>("/lotes?dias=60");
@@ -34,8 +36,15 @@ export function Inventario() {
   useEffect(() => {
     api.get<Producto[]>("/reportes/stock-bajo").then(setStockBajo);
     api.get<MovimientoInventario[]>("/productos/movimientos/recientes").then(setMovimientos);
+    api.get<Producto[]>("/productos").then((data) => setProductos(data.sort((a, b) => a.nombre.localeCompare(b.nombre))));
     cargarVencimientos();
   }, []);
+
+  const productosFiltrados = productos.filter((p) => {
+    const q = busquedaStock.trim().toLowerCase();
+    if (!q) return true;
+    return p.nombre.toLowerCase().includes(q) || (p.codigoBarras ?? "").includes(q) || (p.categoria?.nombre ?? "").toLowerCase().includes(q);
+  });
 
   async function darDeBaja(lote: LoteInventario) {
     const motivo = prompt(`¿Por qué se da de baja "${lote.producto?.nombre}"? (vencido, dañado, etc.)`);
@@ -55,6 +64,49 @@ export function Inventario() {
 
   return (
     <div className="grid grid-cols-1 gap-4 p-4 lg:grid-cols-2">
+      <div className="lg:col-span-2">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-lg font-bold text-stone-800">Stock disponible ahora ({productosFiltrados.length})</h2>
+          <input
+            value={busquedaStock}
+            onChange={(e) => setBusquedaStock(e.target.value)}
+            placeholder="Buscar producto, código o categoría..."
+            className="w-full max-w-xs rounded-lg border border-stone-300 px-3 py-2 text-sm"
+          />
+        </div>
+        <div className="max-h-[50vh] overflow-y-auto overflow-x-auto rounded-lg border border-stone-200 bg-white">
+          <table className="w-full text-sm">
+            <thead className="sticky top-0 bg-stone-50 text-left text-xs uppercase text-stone-500">
+              <tr>
+                <th className="px-3 py-2">Producto</th>
+                <th className="px-3 py-2">Categoría</th>
+                <th className="px-3 py-2">Código</th>
+                <th className="px-3 py-2">Disponible para vender</th>
+              </tr>
+            </thead>
+            <tbody>
+              {productosFiltrados.map((p) => (
+                <tr key={p.id} className="border-t border-stone-100">
+                  <td className="px-3 py-2 font-medium">{p.nombre}</td>
+                  <td className="px-3 py-2 text-stone-500">{p.categoria?.nombre ?? "-"}</td>
+                  <td className="px-3 py-2 text-stone-500">{p.codigoBarras ?? "-"}</td>
+                  <td className={`px-3 py-2 font-semibold ${p.stock <= p.stockMinimo ? "text-red-600" : "text-green-700"}`}>
+                    {p.stock} {UNIDAD_LABELS[p.unidad]}
+                  </td>
+                </tr>
+              ))}
+              {productosFiltrados.length === 0 && (
+                <tr>
+                  <td colSpan={4} className="px-3 py-8 text-center text-stone-400">
+                    Sin resultados
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       <div>
         <h2 className="mb-3 text-lg font-bold text-stone-800">⚠️ Productos con stock bajo ({stockBajo.length})</h2>
         <div className="overflow-hidden rounded-lg border border-stone-200 bg-white">

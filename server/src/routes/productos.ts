@@ -76,21 +76,21 @@ router.get("/:id/movimientos", async (req, res) => {
 });
 
 const productoSchema = z.object({
-  codigoBarras: z.string().trim().min(1).nullish(),
-  nombre: z.string().min(1),
-  descripcion: z.string().nullish(),
-  categoriaId: z.number().int().nullish(),
-  proveedorId: z.number().int().nullish(),
+  codigoBarras: z.string().trim().min(1).max(100).nullish(),
+  nombre: z.string().trim().min(1).max(300),
+  descripcion: z.string().max(2000).nullish(),
+  categoriaId: z.number().int().positive().nullish(),
+  proveedorId: z.number().int().positive().nullish(),
   unidad: z.enum(UNIDADES).default("UNIDAD"),
-  precioCosto: z.number().min(0).default(0),
-  precioVenta: z.number().min(0),
-  precioMayorista: z.number().min(0).nullish(),
+  precioCosto: z.number().min(0).finite().max(1_000_000_000).default(0),
+  precioVenta: z.number().min(0).finite().max(1_000_000_000),
+  precioMayorista: z.number().min(0).finite().max(1_000_000_000).nullish(),
   ivaTasa: z.number().refine((v) => (IVA_TASAS as readonly number[]).includes(v), {
     message: "Tasa de IVA inválida (debe ser 0, 5 o 19)",
   }),
-  stock: z.number().min(0).default(0),
-  stockMinimo: z.number().min(0).default(0),
-  imagenUrl: z.string().nullish(),
+  stock: z.number().min(0).finite().max(100_000_000).default(0),
+  stockMinimo: z.number().min(0).finite().max(100_000_000).default(0),
+  imagenUrl: z.string().max(2000).nullish(),
 });
 
 router.post("/", requireRole("ADMIN"), async (req, res) => {
@@ -145,9 +145,9 @@ router.delete("/:id", requireRole("ADMIN"), async (req, res) => {
 
 const ajusteSchema = z.object({
   tipo: z.enum(TIPOS_MOVIMIENTO),
-  cantidad: z.number().positive(),
-  costoUnitario: z.number().min(0).optional(),
-  motivo: z.string().optional(),
+  cantidad: z.number().positive().finite().max(100_000_000),
+  costoUnitario: z.number().min(0).finite().max(1_000_000_000).optional(),
+  motivo: z.string().max(1000).optional(),
   // Solo aplica a ENTRADA/DEVOLUCION: si se manda, ese lote de mercancía
   // queda rastreado por vencimiento (ver LoteInventario).
   fechaVencimiento: z.coerce.date().nullish(),

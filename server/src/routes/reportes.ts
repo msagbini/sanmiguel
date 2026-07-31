@@ -150,4 +150,24 @@ router.get("/cartera", async (_req, res) => {
   });
 });
 
+// Resumen de cuentas por pagar: espejo de /cartera pero de lo que el
+// negocio le debe a sus proveedores, no de lo que le deben a él.
+router.get("/cuentas-por-pagar", async (_req, res) => {
+  const proveedores = await prisma.proveedor.findMany({
+    where: { saldoPendiente: { gt: 0 } },
+    orderBy: { saldoPendiente: "desc" },
+  });
+  const total = proveedores.reduce((acc, p) => acc + p.saldoPendiente, 0);
+  res.json({
+    total,
+    numeroProveedores: proveedores.length,
+    proveedores: proveedores.map((p) => ({
+      proveedorId: p.id,
+      nombre: p.nombre,
+      telefono: p.telefono,
+      saldoPendiente: p.saldoPendiente,
+    })),
+  });
+});
+
 export default router;

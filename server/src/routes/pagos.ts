@@ -8,8 +8,8 @@ const router = Router();
 router.use(requireAuth);
 
 const cobrarSchema = z.object({
-  monto: z.number().positive(),
-  referencia: z.string().min(1),
+  monto: z.number().positive().finite().max(1_000_000_000),
+  referencia: z.string().min(1).max(200),
 });
 
 // Intenta enviar el cobro automáticamente al datáfono configurado (si hay

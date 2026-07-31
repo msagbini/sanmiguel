@@ -5,7 +5,7 @@ import { api } from "../api";
 import { useAuth } from "../AuthContext";
 import type { Producto, ResumenCartera, ResumenVencimientos } from "../types";
 
-export function AlertBell() {
+export function AlertBell({ align = "right" }: { align?: "left" | "right" }) {
   const { usuario } = useAuth();
   const navigate = useNavigate();
   const [abierto, setAbierto] = useState(false);
@@ -53,7 +53,11 @@ export function AlertBell() {
       {abierto && (
         <>
           <div className="fixed inset-0 z-30" onClick={() => setAbierto(false)} />
-          <div className="absolute right-0 z-40 mt-2 w-72 rounded-xl border border-stone-200 bg-white p-2 text-stone-800 shadow-xl">
+          <div
+            className={`absolute z-40 mt-2 w-72 max-w-[calc(100vw-2rem)] rounded-xl border border-stone-200 bg-white p-2 text-stone-800 shadow-xl ${
+              align === "left" ? "left-0" : "right-0"
+            }`}
+          >
             {total === 0 && <p className="p-3 text-sm text-stone-400">Todo tranquilo por ahora 🕊️</p>}
 
             {usuario?.rol === "ADMIN" && stockBajo > 0 && (
