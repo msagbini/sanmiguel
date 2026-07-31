@@ -7,6 +7,7 @@ export function Configuracion() {
   const { notificar } = useToast();
   const [config, setConfig] = useState<ConfiguracionType | null>(null);
   const [nuevoSecreto, setNuevoSecreto] = useState("");
+  const [nuevoSecretoDatafono, setNuevoSecretoDatafono] = useState("");
   const [guardando, setGuardando] = useState(false);
 
   useEffect(() => {
@@ -24,9 +25,11 @@ export function Configuracion() {
       const actualizado = await api.put<ConfiguracionType>("/configuracion", {
         ...config,
         ...(nuevoSecreto ? { proveedorApiSecret: nuevoSecreto } : {}),
+        ...(nuevoSecretoDatafono ? { datafonoApiSecret: nuevoSecretoDatafono } : {}),
       });
       setConfig(actualizado);
       setNuevoSecreto("");
+      setNuevoSecretoDatafono("");
       notificar("Configuración guardada", "exito");
     } catch (err) {
       notificar(err instanceof ApiError ? err.message : "No se pudo guardar", "error");
@@ -97,6 +100,52 @@ export function Configuracion() {
             <input type="number" value={config.diasParaVencido} onChange={(e) => set("diasParaVencido", Number(e.target.value))} className="input" />
           </Campo>
         </div>
+        <label className="mt-4 flex items-center gap-2 text-sm font-medium">
+          <input type="checkbox" checked={config.habilitarFiado} onChange={(e) => set("habilitarFiado", e.target.checked)} />
+          Habilitar fiado (si se apaga, "Fiado" desaparece como forma de pago; las deudas ya existentes se pueden seguir cobrando desde Cartera)
+        </label>
+      </Seccion>
+
+      <Seccion
+        titulo="Vencimientos"
+        descripcion="Cuando se recibe mercancía con fecha de vencimiento (en Productos → Ajustar stock → Entrada), la app avisa con anticipación antes de que se venza."
+      >
+        <Campo label="Avisar con cuántos días de anticipación">
+          <input type="number" value={config.diasAlertaVencimiento} onChange={(e) => set("diasAlertaVencimiento", Number(e.target.value))} className="input max-w-40" />
+        </Campo>
+      </Seccion>
+
+      <Seccion
+        titulo="Datáfono (pago con tarjeta)"
+        descripcion='La "pantalla de cobro" (mostrar el monto en grande para digitarlo en cualquier datáfono) funciona siempre, sin configurar nada. Esto es solo para el envío automático del cobro a un datáfono compatible.'
+      >
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Campo label="Proveedor de datáfono">
+            <select value={config.proveedorDatafono} onChange={(e) => set("proveedorDatafono", e.target.value as "NINGUNO" | "BOLD")} className="input">
+              <option value="NINGUNO">Ninguno (solo pantalla de cobro manual)</option>
+              <option value="BOLD">Bold</option>
+            </select>
+          </Campo>
+          {config.proveedorDatafono !== "NINGUNO" && (
+            <>
+              <Campo label="URL de la API">
+                <input value={config.datafonoApiUrl ?? ""} onChange={(e) => set("datafonoApiUrl", e.target.value)} placeholder="https://api.bold.co" className="input" />
+              </Campo>
+              <Campo label="API Key">
+                <input value={config.datafonoApiKey ?? ""} onChange={(e) => set("datafonoApiKey", e.target.value)} className="input" />
+              </Campo>
+              <Campo label={`Secreto ${config.datafonoApiSecretConfigurado ? "(ya configurado, deja vacío para no cambiarlo)" : ""}`}>
+                <input
+                  type="password"
+                  value={nuevoSecretoDatafono}
+                  onChange={(e) => setNuevoSecretoDatafono(e.target.value)}
+                  placeholder={config.datafonoApiSecretConfigurado ? "••••••••" : ""}
+                  className="input"
+                />
+              </Campo>
+            </>
+          )}
+        </div>
       </Seccion>
 
       <Seccion
@@ -149,7 +198,7 @@ export function Configuracion() {
         )}
       </Seccion>
 
-      <button onClick={guardar} disabled={guardando} className="mb-8 rounded-lg bg-orange-800 px-6 py-2.5 font-semibold text-white hover:bg-orange-900 disabled:opacity-50">
+      <button onClick={guardar} disabled={guardando} className="mb-8 rounded-lg btn-primary px-6 py-2.5 disabled:opacity-50">
         {guardando ? "Guardando..." : "Guardar configuración"}
       </button>
 

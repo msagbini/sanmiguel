@@ -81,7 +81,7 @@ export function Clientes() {
     <div className="p-4">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-bold text-stone-800">Clientes</h1>
-        <button onClick={() => abrir("nuevo")} className="rounded-lg bg-orange-800 px-4 py-2 font-semibold text-white hover:bg-orange-900">
+        <button onClick={() => abrir("nuevo")} className="rounded-lg btn-primary px-4 py-2">
           + Nuevo cliente
         </button>
       </div>
@@ -130,7 +130,7 @@ export function Clientes() {
                 </td>
                 <td className="px-3 py-2">
                   <div className="flex gap-2 whitespace-nowrap">
-                    <button onClick={() => abrir(c)} className="text-xs font-semibold text-orange-800 underline">
+                    <button onClick={() => abrir(c)} className="text-xs font-semibold text-brand-700 underline">
                       Editar
                     </button>
                     {c.limiteCredito > 0 && (
@@ -205,7 +205,7 @@ export function Clientes() {
               </div>
             </div>
             <div className="mt-5 flex gap-2">
-              <button onClick={guardar} className="flex-1 rounded-lg bg-orange-800 py-2.5 font-semibold text-white hover:bg-orange-900">
+              <button onClick={guardar} className="flex-1 rounded-lg btn-primary py-2.5">
                 Guardar
               </button>
               <button onClick={() => setModalAbierto(null)} className="flex-1 rounded-lg bg-stone-200 py-2.5 font-semibold">

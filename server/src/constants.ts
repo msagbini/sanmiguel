@@ -46,6 +46,8 @@ export const TIPOS_DOCUMENTO_VENTA = ["DOCUMENTO_POS", "FACTURA_ELECTRONICA"] as
 
 export const PROVEEDORES_FACTURACION = ["NINGUNO", "FACTUS"] as const;
 
+export const PROVEEDORES_DATAFONO = ["NINGUNO", "BOLD"] as const;
+
 export const CONSUMIDOR_FINAL = {
   tipoDocumento: "CC" as const,
   numeroDocumento: "222222222222",

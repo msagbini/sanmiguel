@@ -2,16 +2,20 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../db";
 import { requireAuth, requireRole } from "../middleware/auth";
-import { PROVEEDORES_FACTURACION } from "../constants";
+import { PROVEEDORES_FACTURACION, PROVEEDORES_DATAFONO } from "../constants";
 
 const router = Router();
 router.use(requireAuth);
 
 router.get("/", async (_req, res) => {
   const config = await prisma.configuracion.upsert({ where: { id: 1 }, update: {}, create: {} });
-  // Nunca exponer el api secret completo al frontend, solo si está configurado.
-  const { proveedorApiSecret, ...resto } = config;
-  res.json({ ...resto, proveedorApiSecretConfigurado: Boolean(proveedorApiSecret) });
+  // Nunca exponer los secretos completos al frontend, solo si están configurados.
+  const { proveedorApiSecret, datafonoApiSecret, ...resto } = config;
+  res.json({
+    ...resto,
+    proveedorApiSecretConfigurado: Boolean(proveedorApiSecret),
+    datafonoApiSecretConfigurado: Boolean(datafonoApiSecret),
+  });
 });
 
 const schema = z.object({
@@ -38,23 +42,35 @@ const schema = z.object({
   diasParaVencido: z.number().int().min(1).optional(),
   margenAlertaPct: z.number().min(0).optional(),
   descuentoMaximoCajeroPct: z.number().min(0).max(100).optional(),
+  habilitarFiado: z.boolean().optional(),
+  diasAlertaVencimiento: z.number().int().min(1).optional(),
+  proveedorDatafono: z.enum(PROVEEDORES_DATAFONO).optional(),
+  datafonoApiUrl: z.string().nullish(),
+  datafonoApiKey: z.string().nullish(),
+  datafonoApiSecret: z.string().nullish(),
+  fondoCajaSugerido: z.number().min(0).optional(),
 });
 
 router.put("/", requireRole("ADMIN"), async (req, res) => {
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
-  // Si viene vacío, no se sobreescribe el secreto ya guardado.
+  // Si vienen vacíos, no se sobreescriben los secretos ya guardados.
   const data = { ...parsed.data };
   if (data.proveedorApiSecret === "") delete data.proveedorApiSecret;
+  if (data.datafonoApiSecret === "") delete data.datafonoApiSecret;
 
   const config = await prisma.configuracion.upsert({
     where: { id: 1 },
     update: data,
     create: { id: 1, ...data },
   });
-  const { proveedorApiSecret, ...resto } = config;
-  res.json({ ...resto, proveedorApiSecretConfigurado: Boolean(proveedorApiSecret) });
+  const { proveedorApiSecret, datafonoApiSecret, ...resto } = config;
+  res.json({
+    ...resto,
+    proveedorApiSecretConfigurado: Boolean(proveedorApiSecret),
+    datafonoApiSecretConfigurado: Boolean(datafonoApiSecret),
+  });
 });
 
 export default router;

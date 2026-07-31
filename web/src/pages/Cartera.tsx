@@ -113,7 +113,7 @@ export function Cartera() {
                   )}
                 </td>
                 <td className="px-3 py-2">
-                  <button onClick={() => abrirCliente(c.clienteId)} className="text-xs font-semibold text-orange-800 underline">
+                  <button onClick={() => abrirCliente(c.clienteId)} className="text-xs font-semibold text-brand-700 underline">
                     Ver cuenta
                   </button>
                 </td>

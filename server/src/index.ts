@@ -9,6 +9,9 @@ import ventasRoutes from "./routes/ventas";
 import clientesRoutes from "./routes/clientes";
 import reportesRoutes from "./routes/reportes";
 import configuracionRoutes from "./routes/configuracion";
+import lotesRoutes from "./routes/lotes";
+import turnosRoutes from "./routes/turnos";
+import pagosRoutes from "./routes/pagos";
 
 const app = express();
 app.use(cors());
@@ -24,6 +27,9 @@ app.use("/api/ventas", ventasRoutes);
 app.use("/api/clientes", clientesRoutes);
 app.use("/api/reportes", reportesRoutes);
 app.use("/api/configuracion", configuracionRoutes);
+app.use("/api/lotes", lotesRoutes);
+app.use("/api/turnos", turnosRoutes);
+app.use("/api/pagos", pagosRoutes);
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {

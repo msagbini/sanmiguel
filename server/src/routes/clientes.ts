@@ -117,6 +117,7 @@ router.post("/:id/abonos", async (req, res) => {
   }
 
   const nuevoSaldo = cliente.saldoPendiente - parsed.data.monto;
+  const turnoAbierto = await prisma.turno.findFirst({ where: { cerradoEn: null } });
   const [clienteActualizado] = await prisma.$transaction([
     prisma.cliente.update({ where: { id: clienteId }, data: { saldoPendiente: nuevoSaldo } }),
     prisma.cuentaCorrienteMovimiento.create({
@@ -128,6 +129,7 @@ router.post("/:id/abonos", async (req, res) => {
         metodoPago: parsed.data.metodoPago,
         motivo: parsed.data.motivo,
         usuarioId: req.user!.id,
+        turnoId: turnoAbierto?.id ?? null,
       },
     }),
   ]);

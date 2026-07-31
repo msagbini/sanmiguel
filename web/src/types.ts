@@ -124,6 +124,46 @@ export interface ResumenCartera {
   clientes: { clienteId: number; nombre: string; telefono: string | null; saldoPendiente: number; diasVencido: number }[];
 }
 
+export interface LoteInventario {
+  id: number;
+  productoId: number;
+  producto?: { nombre: string; unidad: Unidad; codigoBarras: string | null };
+  fechaVencimiento: string | null;
+  cantidadInicial: number;
+  cantidadDisponible: number;
+  costoUnitario: number;
+  motivo: string | null;
+  activo: boolean;
+  createdAt: string;
+  vencido?: boolean;
+}
+
+export interface ResumenVencimientos {
+  porVencer: number;
+  vencidos: number;
+}
+
+export interface Turno {
+  id: number;
+  usuarioId: number;
+  usuario?: { nombre: string };
+  fondoInicial: number;
+  abiertoEn: string;
+  cerradoEn: string | null;
+  efectivoContado: number | null;
+  efectivoEsperado: number | null;
+  diferencia: number | null;
+  notas: string | null;
+}
+
+export interface ResumenTurno {
+  turno: Turno;
+  totalVentasEfectivo: number;
+  totalAbonosEfectivo: number;
+  efectivoEsperado: number;
+  numeroVentas: number;
+}
+
 export interface Venta {
   id: number;
   numero: number;
@@ -173,6 +213,13 @@ export interface Configuracion {
   diasParaVencido: number;
   margenAlertaPct: number;
   descuentoMaximoCajeroPct: number;
+  habilitarFiado: boolean;
+  diasAlertaVencimiento: number;
+  proveedorDatafono: "NINGUNO" | "BOLD";
+  datafonoApiUrl: string | null;
+  datafonoApiKey: string | null;
+  datafonoApiSecretConfigurado: boolean;
+  fondoCajaSugerido: number;
 }
 
 export interface ResumenReporte {

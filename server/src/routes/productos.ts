@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "../db";
 import { requireAuth, requireRole } from "../middleware/auth";
 import { UNIDADES, IVA_TASAS, TIPOS_MOVIMIENTO } from "../constants";
+import { crearLoteSiAplica, consumirLotesFEFO } from "../services/lotes";
 
 const router = Router();
 router.use(requireAuth);
@@ -146,14 +147,19 @@ const ajusteSchema = z.object({
   cantidad: z.number().positive(),
   costoUnitario: z.number().min(0).optional(),
   motivo: z.string().optional(),
+  // Solo aplica a ENTRADA/DEVOLUCION: si se manda, ese lote de mercancía
+  // queda rastreado por vencimiento (ver LoteInventario).
+  fechaVencimiento: z.coerce.date().nullish(),
 });
 
 // Ajuste manual de inventario: entradas por compra, salidas por merma/daño,
-// o corrección directa tras un conteo físico.
+// o corrección directa tras un conteo físico. Si la entrada trae fecha de
+// vencimiento, ese lote queda disponible para las alertas de vencimiento y
+// se consume con prioridad FEFO en las salidas/ventas futuras.
 router.post("/:id/ajuste", requireRole("ADMIN"), async (req, res) => {
   const parsed = ajusteSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
-  const { tipo, cantidad, costoUnitario, motivo } = parsed.data;
+  const { tipo, cantidad, costoUnitario, motivo, fechaVencimiento } = parsed.data;
   const productoId = Number(req.params.id);
 
   const producto = await prisma.producto.findUnique({ where: { id: productoId } });
@@ -168,25 +174,42 @@ router.post("/:id/ajuste", requireRole("ADMIN"), async (req, res) => {
     return res.status(400).json({ error: "El ajuste dejaría el inventario en negativo" });
   }
 
-  const [productoActualizado] = await prisma.$transaction([
-    prisma.producto.update({
+  const productoActualizado = await prisma.$transaction(async (tx) => {
+    const actualizado = await tx.producto.update({
       where: { id: productoId },
       data: {
         stock: nuevoStock,
         ...(tipo === "ENTRADA" && costoUnitario ? { precioCosto: costoUnitario } : {}),
       },
-    }),
-    prisma.movimientoInventario.create({
+    });
+
+    await tx.movimientoInventario.create({
       data: {
         productoId,
         tipo,
-        cantidad: tipo === "AJUSTE" ? nuevoStock - producto.stock : cantidad,
+        cantidad: tipo === "AJUSTE" ? Math.abs(nuevoStock - producto.stock) : cantidad,
         costoUnitario,
         motivo,
         usuarioId: req.user!.id,
       },
-    }),
-  ]);
+    });
+
+    if (tipo === "ENTRADA" || tipo === "DEVOLUCION") {
+      await crearLoteSiAplica(tx, {
+        productoId,
+        cantidad,
+        costoUnitario: costoUnitario ?? producto.precioCosto,
+        fechaVencimiento,
+        motivo,
+      });
+    } else if (tipo === "SALIDA") {
+      await consumirLotesFEFO(tx, productoId, cantidad);
+    } else if (tipo === "AJUSTE" && nuevoStock < producto.stock) {
+      await consumirLotesFEFO(tx, productoId, producto.stock - nuevoStock);
+    }
+
+    return actualizado;
+  });
 
   res.json(productoActualizado);
 });

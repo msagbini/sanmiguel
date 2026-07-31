@@ -15,8 +15,8 @@ export default defineConfig({
         name: 'San Miguel - Inventario y Ventas',
         short_name: 'San Miguel',
         description: 'Inventario, punto de venta y facturación para Distribuidora San Miguel',
-        theme_color: '#7c2d12',
-        background_color: '#fff7ed',
+        theme_color: '#101f38',
+        background_color: '#f2f4f9',
         display: 'standalone',
         start_url: '/',
         icons: [

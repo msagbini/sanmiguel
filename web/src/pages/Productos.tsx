@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
+import { Download } from "lucide-react";
 import { api, ApiError } from "../api";
 import { useToast } from "../Toast";
 import type { Categoria, Producto, TipoMovimiento, Unidad } from "../types";
 import { UNIDAD_LABELS } from "../types";
+import { RecepcionMercancia } from "../components/RecepcionMercancia";
+import { descargarCSV } from "../csv";
 
 const formatoMoneda = new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 });
 
@@ -30,6 +33,7 @@ export function Productos() {
   const [form, setForm] = useState(PRODUCTO_VACIO);
   const [productoAjuste, setProductoAjuste] = useState<Producto | null>(null);
   const [nuevaCategoria, setNuevaCategoria] = useState("");
+  const [recepcionAbierta, setRecepcionAbierta] = useState(false);
 
   async function cargar() {
     const [p, c] = await Promise.all([
@@ -130,12 +134,39 @@ export function Productos() {
     <div className="p-4">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-bold text-stone-800">Productos</h1>
-        <button
-          onClick={() => abrirEdicion("nuevo")}
-          className="rounded-lg bg-orange-800 px-4 py-2 font-semibold text-white hover:bg-orange-900"
-        >
-          + Nuevo producto
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() =>
+              descargarCSV(
+                `productos-${new Date().toISOString().slice(0, 10)}.csv`,
+                filtrados.map((p) => ({
+                  nombre: p.nombre,
+                  codigoBarras: p.codigoBarras ?? "",
+                  categoria: p.categoria?.nombre ?? "",
+                  unidad: UNIDAD_LABELS[p.unidad],
+                  precioCosto: p.precioCosto,
+                  precioVenta: p.precioVenta,
+                  precioMayorista: p.precioMayorista ?? "",
+                  iva: p.ivaTasa,
+                  stock: p.stock,
+                  stockMinimo: p.stockMinimo,
+                }))
+              )
+            }
+            className="flex items-center gap-1.5 rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm font-semibold text-stone-600 hover:bg-stone-50"
+          >
+            <Download size={15} /> CSV
+          </button>
+          <button
+            onClick={() => setRecepcionAbierta(true)}
+            className="rounded-lg bg-brand-800 px-4 py-2 font-semibold text-white hover:bg-brand-700"
+          >
+            📦 Recepción de mercancía
+          </button>
+          <button onClick={() => abrirEdicion("nuevo")} className="rounded-lg btn-primary px-4 py-2">
+            + Nuevo producto
+          </button>
+        </div>
       </div>
 
       <div className="mb-4 flex flex-wrap gap-3">
@@ -184,7 +215,7 @@ export function Productos() {
                 </td>
                 <td className="px-3 py-2">
                   <div className="flex gap-2 whitespace-nowrap">
-                    <button onClick={() => abrirEdicion(p)} className="text-xs font-semibold text-orange-800 underline">
+                    <button onClick={() => abrirEdicion(p)} className="text-xs font-semibold text-brand-700 underline">
                       Editar
                     </button>
                     <button
@@ -231,6 +262,7 @@ export function Productos() {
               <label className="col-span-2 text-sm">
                 Código de barras
                 <input
+                  autoFocus={modalProducto === "nuevo"}
                   value={form.codigoBarras}
                   onChange={(e) => setForm((f) => ({ ...f, codigoBarras: e.target.value }))}
                   placeholder="Escanéalo con la pistola aquí"
@@ -260,7 +292,7 @@ export function Productos() {
                     placeholder="Crear categoría nueva..."
                     className="w-full rounded-lg border border-stone-300 px-2 py-1 text-xs"
                   />
-                  <button onClick={crearCategoria} type="button" className="whitespace-nowrap text-xs font-semibold text-orange-800 underline">
+                  <button onClick={crearCategoria} type="button" className="whitespace-nowrap text-xs font-semibold text-brand-700 underline">
                     + Crear
                   </button>
                 </div>
@@ -341,7 +373,7 @@ export function Productos() {
               </label>
             </div>
             <div className="mt-5 flex gap-2">
-              <button onClick={guardarProducto} className="flex-1 rounded-lg bg-orange-800 py-2.5 font-semibold text-white hover:bg-orange-900">
+              <button onClick={guardarProducto} className="flex-1 rounded-lg btn-primary py-2.5">
                 Guardar
               </button>
               <button onClick={() => setModalProducto(null)} className="flex-1 rounded-lg bg-stone-200 py-2.5 font-semibold">
@@ -362,6 +394,10 @@ export function Productos() {
           }}
         />
       )}
+
+      {recepcionAbierta && (
+        <RecepcionMercancia categorias={categorias} onCerrar={() => setRecepcionAbierta(false)} onCambios={cargar} />
+      )}
     </div>
   );
 }
@@ -379,6 +415,7 @@ function ModalAjusteStock({
   const [tipo, setTipo] = useState<TipoMovimiento>("ENTRADA");
   const [cantidad, setCantidad] = useState("");
   const [costoUnitario, setCostoUnitario] = useState(String(producto.precioCosto));
+  const [fechaVencimiento, setFechaVencimiento] = useState("");
   const [motivo, setMotivo] = useState("");
 
   async function guardar() {
@@ -392,6 +429,7 @@ function ModalAjusteStock({
         tipo,
         cantidad: cant,
         costoUnitario: tipo === "ENTRADA" ? Number(costoUnitario) || undefined : undefined,
+        fechaVencimiento: tipo === "ENTRADA" && fechaVencimiento ? fechaVencimiento : undefined,
         motivo: motivo || undefined,
       });
       notificar("Inventario actualizado", "exito");
@@ -432,15 +470,26 @@ function ModalAjusteStock({
             />
           </label>
           {tipo === "ENTRADA" && (
-            <label className="text-sm">
-              Costo unitario de compra
-              <input
-                type="number"
-                value={costoUnitario}
-                onChange={(e) => setCostoUnitario(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2"
-              />
-            </label>
+            <>
+              <label className="text-sm">
+                Costo unitario de compra
+                <input
+                  type="number"
+                  value={costoUnitario}
+                  onChange={(e) => setCostoUnitario(e.target.value)}
+                  className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2"
+                />
+              </label>
+              <label className="text-sm">
+                Fecha de vencimiento (opcional, para productos perecederos)
+                <input
+                  type="date"
+                  value={fechaVencimiento}
+                  onChange={(e) => setFechaVencimiento(e.target.value)}
+                  className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2"
+                />
+              </label>
+            </>
           )}
           <label className="text-sm">
             Motivo (opcional)
@@ -452,7 +501,7 @@ function ModalAjusteStock({
           </label>
         </div>
         <div className="mt-5 flex gap-2">
-          <button onClick={guardar} className="flex-1 rounded-lg bg-orange-800 py-2.5 font-semibold text-white hover:bg-orange-900">
+          <button onClick={guardar} className="flex-1 rounded-lg btn-primary py-2.5">
             Guardar
           </button>
           <button onClick={onClose} className="flex-1 rounded-lg bg-stone-200 py-2.5 font-semibold">

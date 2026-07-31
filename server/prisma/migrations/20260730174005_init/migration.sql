@@ -37,6 +37,20 @@ CREATE TABLE "Producto" (
 );
 
 -- CreateTable
+CREATE TABLE "LoteInventario" (
+    "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    "productoId" INTEGER NOT NULL,
+    "fechaVencimiento" DATETIME,
+    "cantidadInicial" REAL NOT NULL,
+    "cantidadDisponible" REAL NOT NULL,
+    "costoUnitario" REAL NOT NULL DEFAULT 0,
+    "motivo" TEXT,
+    "activo" BOOLEAN NOT NULL DEFAULT true,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "LoteInventario_productoId_fkey" FOREIGN KEY ("productoId") REFERENCES "Producto" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
+);
+
+-- CreateTable
 CREATE TABLE "MovimientoInventario" (
     "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
     "productoId" INTEGER NOT NULL,
@@ -80,10 +94,12 @@ CREATE TABLE "CuentaCorrienteMovimiento" (
     "metodoPago" TEXT,
     "motivo" TEXT,
     "usuarioId" INTEGER NOT NULL,
+    "turnoId" INTEGER,
     "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT "CuentaCorrienteMovimiento_clienteId_fkey" FOREIGN KEY ("clienteId") REFERENCES "Cliente" ("id") ON DELETE RESTRICT ON UPDATE CASCADE,
     CONSTRAINT "CuentaCorrienteMovimiento_ventaId_fkey" FOREIGN KEY ("ventaId") REFERENCES "Venta" ("id") ON DELETE SET NULL ON UPDATE CASCADE,
-    CONSTRAINT "CuentaCorrienteMovimiento_usuarioId_fkey" FOREIGN KEY ("usuarioId") REFERENCES "Usuario" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
+    CONSTRAINT "CuentaCorrienteMovimiento_usuarioId_fkey" FOREIGN KEY ("usuarioId") REFERENCES "Usuario" ("id") ON DELETE RESTRICT ON UPDATE CASCADE,
+    CONSTRAINT "CuentaCorrienteMovimiento_turnoId_fkey" FOREIGN KEY ("turnoId") REFERENCES "Turno" ("id") ON DELETE SET NULL ON UPDATE CASCADE
 );
 
 -- CreateTable
@@ -106,9 +122,25 @@ CREATE TABLE "Venta" (
     "urlQr" TEXT,
     "proveedorFactura" TEXT,
     "motivoAnulacion" TEXT,
+    "turnoId" INTEGER,
     "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT "Venta_clienteId_fkey" FOREIGN KEY ("clienteId") REFERENCES "Cliente" ("id") ON DELETE SET NULL ON UPDATE CASCADE,
-    CONSTRAINT "Venta_usuarioId_fkey" FOREIGN KEY ("usuarioId") REFERENCES "Usuario" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
+    CONSTRAINT "Venta_usuarioId_fkey" FOREIGN KEY ("usuarioId") REFERENCES "Usuario" ("id") ON DELETE RESTRICT ON UPDATE CASCADE,
+    CONSTRAINT "Venta_turnoId_fkey" FOREIGN KEY ("turnoId") REFERENCES "Turno" ("id") ON DELETE SET NULL ON UPDATE CASCADE
+);
+
+-- CreateTable
+CREATE TABLE "Turno" (
+    "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    "usuarioId" INTEGER NOT NULL,
+    "fondoInicial" REAL NOT NULL DEFAULT 0,
+    "abiertoEn" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "cerradoEn" DATETIME,
+    "efectivoContado" REAL,
+    "efectivoEsperado" REAL,
+    "diferencia" REAL,
+    "notas" TEXT,
+    CONSTRAINT "Turno_usuarioId_fkey" FOREIGN KEY ("usuarioId") REFERENCES "Usuario" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
 );
 
 -- CreateTable
@@ -152,7 +184,14 @@ CREATE TABLE "Configuracion" (
     "diasPlazoCreditoPorDefecto" INTEGER NOT NULL DEFAULT 30,
     "diasParaVencido" INTEGER NOT NULL DEFAULT 30,
     "margenAlertaPct" REAL NOT NULL DEFAULT 8,
-    "descuentoMaximoCajeroPct" REAL NOT NULL DEFAULT 5
+    "descuentoMaximoCajeroPct" REAL NOT NULL DEFAULT 5,
+    "habilitarFiado" BOOLEAN NOT NULL DEFAULT true,
+    "diasAlertaVencimiento" INTEGER NOT NULL DEFAULT 7,
+    "proveedorDatafono" TEXT NOT NULL DEFAULT 'NINGUNO',
+    "datafonoApiUrl" TEXT,
+    "datafonoApiKey" TEXT,
+    "datafonoApiSecret" TEXT,
+    "fondoCajaSugerido" REAL NOT NULL DEFAULT 0
 );
 
 -- CreateIndex
@@ -166,6 +205,12 @@ CREATE UNIQUE INDEX "Producto_codigoBarras_key" ON "Producto"("codigoBarras");
 
 -- CreateIndex
 CREATE INDEX "Producto_nombre_idx" ON "Producto"("nombre");
+
+-- CreateIndex
+CREATE INDEX "LoteInventario_productoId_idx" ON "LoteInventario"("productoId");
+
+-- CreateIndex
+CREATE INDEX "LoteInventario_fechaVencimiento_idx" ON "LoteInventario"("fechaVencimiento");
 
 -- CreateIndex
 CREATE INDEX "MovimientoInventario_productoId_idx" ON "MovimientoInventario"("productoId");

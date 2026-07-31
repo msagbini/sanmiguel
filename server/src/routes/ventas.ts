@@ -4,6 +4,7 @@ import { prisma } from "../db";
 import { requireAuth, requireRole } from "../middleware/auth";
 import { METODOS_PAGO, IVA_TASAS } from "../constants";
 import { getInvoicingProvider } from "../services/invoicing";
+import { consumirLotesFEFO } from "../services/lotes";
 
 const router = Router();
 router.use(requireAuth);
@@ -153,6 +154,9 @@ router.post("/", async (req, res) => {
   let cliente = clienteId ? await prisma.cliente.findUnique({ where: { id: clienteId } }) : null;
 
   if (metodoPago === "CREDITO") {
+    if (!config.habilitarFiado) {
+      return res.status(400).json({ error: "El fiado está deshabilitado en Configuración" });
+    }
     if (!cliente || cliente.esConsumidorFinal) {
       return res.status(400).json({ error: "Para fiar una venta hay que identificar al cliente" });
     }
@@ -173,6 +177,8 @@ router.post("/", async (req, res) => {
   });
   const numero = (ultima?.numero ?? 0) + 1;
 
+  const turnoAbierto = await prisma.turno.findFirst({ where: { cerradoEn: null } });
+
   const venta = await prisma.$transaction(async (tx) => {
     const nueva = await tx.venta.create({
       data: {
@@ -187,6 +193,7 @@ router.post("/", async (req, res) => {
         metodoPago,
         efectivoRecibido: metodoPago === "EFECTIVO" ? (efectivoRecibido ?? null) : null,
         cambio: metodoPago === "EFECTIVO" && efectivoRecibido != null ? efectivoRecibido - total : null,
+        turnoId: turnoAbierto?.id ?? null,
         items: { create: itemsData },
       },
       include: VENTA_INCLUDE,
@@ -207,6 +214,7 @@ router.post("/", async (req, res) => {
           ventaId: nueva.id,
         },
       });
+      await consumirLotesFEFO(tx, item.productoId, item.cantidad);
     }
 
     if (metodoPago === "CREDITO" && cliente) {

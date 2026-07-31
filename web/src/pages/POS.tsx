@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, ApiError } from "../api";
 import { useAuth } from "../AuthContext";
-import type { Categoria, Cliente, Configuracion, MetodoPago, Producto, Venta } from "../types";
+import type { Categoria, Cliente, Configuracion, MetodoPago, Producto, TopProducto, Venta } from "../types";
 import { useBarcodeScanner } from "../hooks/useBarcodeScanner";
 import { useToast } from "../Toast";
 import { ClienteSelector } from "../components/ClienteSelector";
 import { Recibo } from "../components/Recibo";
 import { ProductoLibreModal, type ProductoLibreDatos } from "../components/ProductoLibreModal";
+import { PantallaCobro } from "../components/PantallaCobro";
+import { beepExito, beepError } from "../sonido";
 
 const formatoMoneda = new Intl.NumberFormat("es-CO", {
   style: "currency",
@@ -49,13 +51,23 @@ export function POS() {
   const [descuentoGlobalPct, setDescuentoGlobalPct] = useState(0);
   const [descuentoCustom, setDescuentoCustom] = useState("");
   const [modalLibreAbierto, setModalLibreAbierto] = useState(false);
+  const [pantallaCobroAbierta, setPantallaCobroAbierta] = useState(false);
   const [procesando, setProcesando] = useState(false);
   const [ventaCompletada, setVentaCompletada] = useState<Venta | null>(null);
+  const [masVendidos, setMasVendidos] = useState<Map<number, number>>(new Map());
 
   useEffect(() => {
     api.get<Producto[]>("/productos").then(setProductos);
     api.get<Categoria[]>("/categorias").then(setCategorias);
     api.get<Configuracion>("/configuracion").then(setConfig);
+
+    // Catálogo ordenado por lo más vendido en los últimos 30 días, para que
+    // lo que el negocio más rota quede primero sin tener que buscarlo.
+    const hace30Dias = new Date();
+    hace30Dias.setDate(hace30Dias.getDate() - 30);
+    api
+      .get<TopProducto[]>(`/reportes/top-productos?desde=${hace30Dias.toISOString()}&limit=500`)
+      .then((top) => setMasVendidos(new Map(top.map((t) => [t.productoId, t.cantidad]))));
   }, []);
 
   // Si se elige (o cambia) un cliente mayorista, los productos ya en el
@@ -129,6 +141,7 @@ export function POS() {
   async function manejarEscaneo(codigo: string) {
     try {
       const producto = await api.get<Producto>(`/productos/codigo/${encodeURIComponent(codigo)}`);
+      beepExito();
       agregarAlCarrito(producto);
       return;
     } catch {
@@ -138,10 +151,12 @@ export function POS() {
       (p) => p.nombre.toLowerCase().includes(codigo.toLowerCase()) || p.codigoBarras === codigo
     );
     if (coincidencias.length === 1) {
+      beepExito();
       agregarAlCarrito(coincidencias[0]);
     } else if (coincidencias.length > 1) {
       notificar("Hay varios productos que coinciden, selecciónalo de la lista", "info");
     } else {
+      beepError();
       notificar(`No se encontró ningún producto para "${codigo}"`, "error");
     }
   }
@@ -150,12 +165,14 @@ export function POS() {
 
   const productosFiltrados = useMemo(() => {
     const q = inputProps.value.trim().toLowerCase();
-    return productos.filter((p) => {
-      if (categoriaId && p.categoriaId !== categoriaId) return false;
-      if (!q) return true;
-      return p.nombre.toLowerCase().includes(q) || (p.codigoBarras ?? "").includes(q);
-    });
-  }, [productos, categoriaId, inputProps.value]);
+    return productos
+      .filter((p) => {
+        if (categoriaId && p.categoriaId !== categoriaId) return false;
+        if (!q) return true;
+        return p.nombre.toLowerCase().includes(q) || (p.codigoBarras ?? "").includes(q);
+      })
+      .sort((a, b) => (masVendidos.get(b.id) ?? 0) - (masVendidos.get(a.id) ?? 0) || a.nombre.localeCompare(b.nombre));
+  }, [productos, categoriaId, inputProps.value, masVendidos]);
 
   function cambiarCantidad(key: string, delta: number) {
     setCarrito((prev) =>
@@ -282,13 +299,55 @@ export function POS() {
     }
   }
 
+  // Con tarjeta, primero se muestra la pantalla de cobro (el monto en grande
+  // para digitarlo en el datáfono) y solo se registra la venta cuando el
+  // cajero confirma que el cliente ya pagó.
+  function alHacerClicCobrar() {
+    if (metodoPago === "TARJETA") {
+      setPantallaCobroAbierta(true);
+    } else {
+      cobrar();
+    }
+  }
+
+  // Atajos de teclado tipo POS de mostrador: F2 vuelve al campo de escaneo,
+  // F9 cobra, Escape cierra lo que esté abierto.
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "F2") {
+        e.preventDefault();
+        enfocar();
+      } else if (e.key === "F9") {
+        e.preventDefault();
+        if (!ventaCompletada) alHacerClicCobrar();
+      } else if (e.key === "Escape") {
+        if (pantallaCobroAbierta) setPantallaCobroAbierta(false);
+        else if (modalLibreAbierto) setModalLibreAbierto(false);
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    metodoPago,
+    carrito,
+    descuentoGlobalPct,
+    cliente,
+    efectivoRecibido,
+    procesando,
+    fiadoInvalido,
+    pantallaCobroAbierta,
+    modalLibreAbierto,
+    ventaCompletada,
+  ]);
+
   if (ventaCompletada && config) {
     return (
       <div className="mx-auto max-w-md p-4">
         <div className="no-imprimir mb-4 flex gap-2">
           <button
             onClick={() => window.print()}
-            className="flex-1 rounded-lg bg-orange-800 py-2.5 font-semibold text-white hover:bg-orange-900"
+            className="flex-1 rounded-lg btn-primary py-2.5"
           >
             🖨️ Imprimir recibo
           </button>
@@ -313,7 +372,7 @@ export function POS() {
           <input
             {...inputProps}
             placeholder="Escanea el código de barras o escribe para buscar..."
-            className="w-full rounded-lg border-2 border-orange-700 px-4 py-3 text-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+            className="w-full rounded-lg border-2 border-brand-700 px-4 py-3 text-lg focus:outline-none focus:ring-2 focus:ring-gold-500"
           />
           <button
             onClick={() => setModalLibreAbierto(true)}
@@ -328,7 +387,7 @@ export function POS() {
           <button
             onClick={() => setCategoriaId(null)}
             className={`rounded-full px-3 py-1 text-sm font-medium ${
-              categoriaId === null ? "bg-orange-800 text-white" : "bg-white text-stone-600 border border-stone-300"
+              categoriaId === null ? "bg-brand-800 text-white" : "bg-white text-stone-600 border border-stone-300"
             }`}
           >
             Todas
@@ -338,7 +397,7 @@ export function POS() {
               key={c.id}
               onClick={() => setCategoriaId(c.id)}
               className={`rounded-full px-3 py-1 text-sm font-medium ${
-                categoriaId === c.id ? "bg-orange-800 text-white" : "bg-white text-stone-600 border border-stone-300"
+                categoriaId === c.id ? "bg-brand-800 text-white" : "bg-white text-stone-600 border border-stone-300"
               }`}
             >
               {c.nombre}
@@ -352,10 +411,10 @@ export function POS() {
               key={p.id}
               onClick={() => agregarAlCarrito(p)}
               disabled={p.stock <= 0}
-              className="flex flex-col items-start rounded-lg border border-stone-200 bg-white p-3 text-left shadow-sm hover:border-orange-500 hover:shadow disabled:opacity-40"
+              className="flex flex-col items-start rounded-lg border border-stone-200 bg-white p-3 text-left shadow-sm hover:border-gold-500 hover:shadow disabled:opacity-40"
             >
               <span className="line-clamp-2 text-sm font-medium text-stone-800">{p.nombre}</span>
-              <span className="mt-1 text-base font-bold text-orange-800">
+              <span className="mt-1 text-base font-bold text-gold-700">
                 {formatoMoneda.format(cliente?.tipoCliente === "MAYORISTA" ? precioSugerido(p, cliente) : p.precioVenta)}
               </span>
               {cliente?.tipoCliente === "MAYORISTA" && p.precioMayorista != null && (
@@ -396,7 +455,7 @@ export function POS() {
                     className="w-16 rounded border border-stone-200 px-1 py-0.5"
                   />
                   c/u
-                  {item.precioManual && item.producto && <span className="text-orange-600">(editado)</span>}
+                  {item.precioManual && item.producto && <span className="text-amber-600">(editado)</span>}
                 </div>
               </div>
               <button
@@ -427,7 +486,7 @@ export function POS() {
               key={p}
               onClick={() => setDescuentoGlobalPct(descuentoGlobalPct === p ? 0 : p)}
               className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                descuentoGlobalPct === p ? "bg-orange-800 text-white" : "bg-stone-100 text-stone-600 hover:bg-stone-200"
+                descuentoGlobalPct === p ? "bg-brand-800 text-white" : "bg-stone-100 text-stone-600 hover:bg-stone-200"
               }`}
             >
               {p}%
@@ -490,7 +549,7 @@ export function POS() {
             <option value="TARJETA">Tarjeta</option>
             <option value="TRANSFERENCIA">Transferencia / Nequi / Daviplata</option>
             <option value="MIXTO">Mixto</option>
-            <option value="CREDITO">Fiado (crédito)</option>
+            {config?.habilitarFiado && <option value="CREDITO">Fiado (crédito)</option>}
           </select>
         </div>
 
@@ -532,7 +591,7 @@ export function POS() {
         )}
 
         <button
-          onClick={cobrar}
+          onClick={alHacerClicCobrar}
           disabled={carrito.length === 0 || procesando || fiadoInvalido}
           className="mt-4 rounded-lg bg-green-700 py-3 text-lg font-bold text-white hover:bg-green-800 disabled:opacity-50"
         >
@@ -540,12 +599,28 @@ export function POS() {
             ? "Procesando..."
             : metodoPago === "CREDITO"
               ? `Fiar ${formatoMoneda.format(totales.total)}`
-              : `Cobrar ${formatoMoneda.format(totales.total)}`}
+              : metodoPago === "TARJETA"
+                ? `Cobrar en datáfono ${formatoMoneda.format(totales.total)}`
+                : `Cobrar ${formatoMoneda.format(totales.total)}`}
         </button>
+        <p className="mt-1.5 text-center text-[11px] text-stone-400">F2 escanear · F9 cobrar · Esc cancelar</p>
       </div>
 
       {modalLibreAbierto && (
         <ProductoLibreModal onGuardar={agregarProductoLibre} onCerrar={() => setModalLibreAbierto(false)} />
+      )}
+
+      {pantallaCobroAbierta && config && (
+        <PantallaCobro
+          monto={totales.total}
+          referencia={`POS-${Date.now()}`}
+          config={config}
+          onCancelar={() => setPantallaCobroAbierta(false)}
+          onConfirmar={() => {
+            setPantallaCobroAbierta(false);
+            cobrar();
+          }}
+        />
       )}
     </div>
   );

@@ -118,7 +118,7 @@ export function ClienteSelector({
               setNuevo((n) => ({ ...n, numeroDocumento: documento }));
               setCreando(true);
             }}
-            className="mt-2 text-xs font-semibold text-orange-800 underline"
+            className="mt-2 text-xs font-semibold text-brand-700 underline"
           >
             + Registrar cliente nuevo
           </button>
@@ -157,7 +157,7 @@ export function ClienteSelector({
             <button
               onClick={crearCliente}
               disabled={!nuevo.numeroDocumento || !nuevo.nombre}
-              className="flex-1 rounded bg-orange-800 py-1.5 font-semibold text-white disabled:opacity-50"
+              className="btn-primary flex-1 py-1.5"
             >
               Guardar
             </button>

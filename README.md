@@ -4,6 +4,11 @@ App web para la salsamentaria/distribuidora San Miguel (Cra 43 con Calle 8,
 Mercado de Barranquilla): control de inventario, punto de venta con lectura
 de código de barras y facturación electrónica DIAN.
 
+El nombre y la identidad visual (azul celestial + oro) están inspirados en
+San Miguel Arcángel: el protector, el que pelea con orden y con las cuentas
+claras — de ahí también el énfasis en cartera controlada y arqueo de caja,
+no solo en vender.
+
 ## ¿Qué incluye?
 
 - **Inventario**: productos con código de barras, categorías (Desechables,
@@ -39,8 +44,34 @@ de código de barras y facturación electrónica DIAN.
   registrar abonos (pagos parciales o totales) y genera un link de WhatsApp
   con el saldo pendiente listo para enviar como recordatorio. Todo queda en
   un historial auditable (quién fio, quién recibió el abono, cuándo).
+- **Vencimientos**: al recibir mercancía se le puede poner fecha de
+  vencimiento (queda como un "lote"). El inventario descuenta primero lo más
+  próximo a vencer (FEFO), Inventario avisa qué está por vencer o ya venció,
+  y desde ahí mismo se puede "dar de baja" un lote dañado/vencido (genera la
+  salida de inventario sola).
+- **Recepción de mercancía**: pantalla dedicada para cuando llega el pedido
+  del proveedor — se escanea cada producto y se le suma la cantidad
+  recibida sin salir de esa pantalla; si el producto no existe todavía, se
+  crea al vuelo con el código ya escaneado (código de barras o carga
+  manual, lo que sea más rápido en el momento).
+- **Cobro con datáfono**: al elegir "Tarjeta", aparece una pantalla de cobro
+  con el monto en letra gigante para digitarlo en cualquier datáfono físico
+  (funciona con cualquier marca, sin configurar nada). Si más adelante
+  contratan un datáfono con API propia, hay un conector de referencia
+  (`server/src/services/terminal.ts`) para enviarle el cobro automáticamente.
+- **Turno de caja (arqueo)**: se abre el turno con una base en efectivo y se
+  cierra contando el efectivo físico; la app calcula lo esperado (base +
+  ventas en efectivo + abonos de fiado en efectivo) y muestra la diferencia,
+  para detectar faltantes sin depender de la memoria de quién vendió qué.
 - **Reportes**: ventas por día, productos más vendidos, ganancia estimada,
-  ticket promedio.
+  ticket promedio, exportables a CSV (Excel) desde Ventas, Productos y
+  Reportes.
+- **Catálogo inteligente en el POS**: se ordena solo por lo más vendido en
+  los últimos 30 días, para que lo que más rota quede primero. Atajos de
+  teclado (F2 escanear, F9 cobrar, Esc cancelar) y un pitido de
+  confirmación al escanear, como una caja registradora de verdad.
+- **Campana de alertas**: junta en un solo lugar stock bajo, vencimientos
+  próximos y cartera vencida, con acceso directo a cada pantalla.
 - **Usuarios y roles**: Administrador (todo, incluye anular ventas y
   autorizar descuentos/fiados grandes) y Cajero (POS, ver ventas, cartera y
   clientes, con topes de descuento), para que cualquier persona pueda
@@ -184,23 +215,99 @@ total y quién no ha pagado.
 - Si se anula una venta fiada, la deuda se revierte sola.
 - Todo movimiento (cada venta fiada, cada abono) queda en un historial con
   fecha y quién lo hizo, para poder auditar "¿quién le fio esto a fulano?".
+- **Si deciden dejar de fiar del todo**, en Configuración hay un interruptor
+  maestro "Habilitar fiado": al apagarlo, "Fiado" desaparece como forma de
+  pago en el POS (nadie puede fiar una venta nueva), pero las deudas que ya
+  existen se pueden seguir cobrando y viendo en Cartera con toda
+  normalidad. No hay que perder el historial para poner freno a que se siga
+  fiando.
 
 Esto no reemplaza la disciplina de cobrar — pero al menos ahora hay un
-número exacto de cuánto se está fiando y a quién, en vez de depender de una
-libreta o de la memoria.
+número exacto de cuánto se está fiando y a quién (con cupos que ponen un
+límite duro), en vez de depender de una libreta o de la memoria.
+
+## Vencimientos (productos perecederos)
+
+Pensado para lo que se vence de verdad (embutidos, lácteos, algunos
+desechables con vida útil): al recibir mercancía (Productos → Ajustar stock
+→ Entrada, o desde Recepción de mercancía) se puede poner la fecha de
+vencimiento de ese lote. La app:
+
+- Descuenta inventario con **FEFO** (First-Expired-First-Out): al vender o
+  registrar una salida, se consume primero el lote que vence más pronto.
+- En **Inventario** aparece qué está por vencer (con los días de
+  anticipación que se configuren) y qué ya venció, con cantidad y producto.
+- Desde ahí mismo se puede **dar de baja** un lote (vencido, dañado): genera
+  la salida de inventario correspondiente y descuenta el stock, con el
+  motivo que se escriba quedando en el historial.
+- Un producto que nunca recibe fecha de vencimiento simplemente no entra a
+  este seguimiento — no es obligatorio, solo está disponible para lo que sí
+  se vence.
+
+## Recepción de mercancía
+
+Desde Productos → "Recepción de mercancía": pantalla pensada para cuando
+llega el pedido del proveedor. Se escanea cada producto uno tras otro y se
+le suma la cantidad recibida (con costo y fecha de vencimiento si aplica)
+sin salir de esa pantalla. Si algo no existe todavía en el catálogo, se
+crea ahí mismo con el código ya escaneado — o se puede escribir a mano si no
+tiene código de barras. Al final queda un resumen de todo lo recibido en esa
+sesión.
+
+## Cobro con datáfono
+
+La solución que funciona hoy mismo, sin contratar nada ni configurar nada:
+al elegir "Tarjeta" como forma de pago, aparece una **pantalla de cobro**
+con el monto exacto en letra gigante, para que el cajero lo digite (o el
+cliente lo verifique) en cualquier datáfono físico de cualquier banco o
+proveedor. Reduce el error de digitar mal el monto, que es el problema real
+del día a día.
+
+Para "empujar" el cobro automáticamente al datáfono (que se active solo,
+sin digitar nada) hace falta un datáfono con API propia — cada marca (Bold,
+RappiPay POS, Movii, addi, datáfonos de bancos) tiene la suya y requiere una
+cuenta de comercio habilitada con esa marca. Se dejó un conector de
+referencia para **Bold** (`server/src/services/terminal.ts`) siguiendo su
+contrato público de API; se activa en Configuración → Datáfono con sus
+credenciales. Igual que con la facturación electrónica, si el envío
+automático falla, la venta no se bloquea: el cajero cobra manualmente con
+la pantalla de cobro y ya.
+
+## Turno de caja (arqueo)
+
+Con dos empleados y la mamá entrando de vez en cuando, es fácil perder la
+cuenta de cuánto debería haber en caja. Por eso hay un turno de caja
+opcional (no bloquea las ventas si no se abre uno):
+
+- **Abrir caja** con una base en efectivo (fondo inicial).
+- Mientras el turno está abierto, cada venta y cada abono de fiado quedan
+  asociados a ese turno.
+- **Cerrar caja** contando el efectivo físico: la app calcula lo esperado
+  (fondo + ventas en efectivo + abonos de fiado recibidos en efectivo
+  durante el turno) y muestra la diferencia contra lo contado. Los pagos con
+  tarjeta, transferencia o fiado no entran en este cálculo porque no son
+  efectivo en el cajón.
+- Solo puede haber un turno abierto a la vez (pensado para una sola caja);
+  lo puede cerrar quien lo abrió o un administrador.
 
 ## Estructura de carpetas
 
 ```
 server/
-  prisma/schema.prisma   Modelo de datos
-  prisma/seed.ts         Datos iniciales (admin, categorías, productos demo)
-  src/routes/            Endpoints (productos, ventas, clientes, reportes...)
+  prisma/schema.prisma        Modelo de datos
+  prisma/seed.ts              Datos iniciales (admin, categorías, productos demo)
+  src/routes/                 Endpoints (productos, ventas, clientes, reportes, lotes, turnos, pagos...)
   src/services/invoicing.ts   Conector de facturación electrónica DIAN
+  src/services/terminal.ts    Conector de datáfono
+  src/services/lotes.ts       Consumo FEFO de lotes con vencimiento
 web/
-  src/pages/             Pantallas (POS, Productos, Ventas, Reportes...)
-  src/hooks/useBarcodeScanner.ts  Captura del lector de código de barras
-  src/components/Recibo.tsx       Recibo/factura imprimible
+  src/pages/                       Pantallas (POS, Productos, Ventas, Cartera, Inventario, Reportes...)
+  src/hooks/useBarcodeScanner.ts   Captura del lector de código de barras
+  src/components/Recibo.tsx        Recibo/factura imprimible
+  src/components/PantallaCobro.tsx      Pantalla de cobro con datáfono
+  src/components/RecepcionMercancia.tsx Recepción de mercancía (escaneo + manual)
+  src/components/TurnoWidget.tsx        Apertura/cierre de caja
+  src/components/AlertBell.tsx          Campana de alertas (stock, vencimientos, cartera)
 ```
 
 ## Roadmap (para crecer a otros negocios / más de un PC)

@@ -23,6 +23,7 @@ model Usuario {
   ventas            Venta[]
   movimientos       MovimientoInventario[]
   movimientosCuenta CuentaCorrienteMovimiento[]
+  turnos            Turno[]
 }
 
 model Categoria {
@@ -58,8 +59,31 @@ model Producto {
 
   movimientos MovimientoInventario[]
   ventaItems  VentaItem[]
+  lotes       LoteInventario[]
 
   @@index([nombre])
+}
+
+// Lote/partida de inventario con su propia fecha de vencimiento. Permite que
+// un mismo producto tenga varias entradas con vencimientos distintos (lo que
+// llegó hoy vence en agosto, lo que quedaba de la semana pasada vence en
+// julio) y que las salidas consuman primero lo más próximo a vencer (FEFO).
+// Un producto que nunca recibe una fecha de vencimiento simplemente no tiene
+// lotes: su stock se maneja como antes, sin este seguimiento.
+model LoteInventario {
+  id                 Int       @id @default(autoincrement())
+  productoId         Int
+  producto           Producto  @relation(fields: [productoId], references: [id])
+  fechaVencimiento   DateTime?
+  cantidadInicial    Float
+  cantidadDisponible Float
+  costoUnitario      Float     @default(0)
+  motivo             String?
+  activo             Boolean   @default(true)
+  createdAt          DateTime  @default(now())
+
+  @@index([productoId])
+  @@index([fechaVencimiento])
 }
 
 model MovimientoInventario {
@@ -121,6 +145,8 @@ model CuentaCorrienteMovimiento {
   motivo          String?
   usuarioId       Int
   usuario         Usuario  @relation(fields: [usuarioId], references: [id])
+  turnoId         Int?
+  turno           Turno?   @relation(fields: [turnoId], references: [id])
   createdAt       DateTime @default(now())
 
   @@index([clienteId])
@@ -151,6 +177,8 @@ model Venta {
   urlQr            String?
   proveedorFactura String?
   motivoAnulacion  String?
+  turnoId          Int?
+  turno            Turno?   @relation(fields: [turnoId], references: [id])
   createdAt        DateTime @default(now())
 
   items             VentaItem[]
@@ -159,6 +187,27 @@ model Venta {
 
   @@unique([prefijo, numero])
   @@index([createdAt])
+}
+
+// Turno de caja: se abre con una base (fondo inicial) y se cierra contando el
+// efectivo físico. La diferencia entre lo esperado (fondo + ventas en
+// efectivo) y lo contado ayuda a detectar faltantes sin tener que confiar en
+// la memoria de quién vendió qué. Pensado para un solo punto de caja: solo
+// puede haber un turno abierto a la vez.
+model Turno {
+  id               Int       @id @default(autoincrement())
+  usuarioId        Int
+  usuario          Usuario   @relation(fields: [usuarioId], references: [id])
+  fondoInicial     Float     @default(0)
+  abiertoEn        DateTime  @default(now())
+  cerradoEn        DateTime?
+  efectivoContado  Float?
+  efectivoEsperado Float?
+  diferencia       Float?
+  notas            String?
+
+  ventas            Venta[]
+  movimientosCuenta CuentaCorrienteMovimiento[]
 }
 
 model VentaItem {
@@ -218,4 +267,24 @@ model Configuracion {
   margenAlertaPct          Float @default(8)
   // Tope de descuento que un CAJERO puede aplicar sin ser ADMIN (en %).
   descuentoMaximoCajeroPct Float @default(5)
+
+  // Interruptor maestro del fiado: si está apagado, "Fiado" desaparece como
+  // forma de pago en el POS (las deudas ya existentes se pueden seguir
+  // cobrando desde Cartera, solo se bloquean fiados nuevos).
+  habilitarFiado Boolean @default(true)
+
+  // Vencimientos: a cuántos días de anticipación se avisa que un lote está por vencer.
+  diasAlertaVencimiento Int @default(7)
+
+  // Datáfono / pago con tarjeta: conector de referencia para enviar el monto
+  // directamente al datáfono cuando el proveedor lo permita. La "pantalla de
+  // cobro" (mostrar el monto en grande) funciona siempre, sin necesidad de
+  // configurar nada aquí.
+  proveedorDatafono String  @default("NINGUNO") // NINGUNO | BOLD
+  datafonoApiUrl    String?
+  datafonoApiKey    String?
+  datafonoApiSecret String?
+
+  // Sugerencia de base de caja al abrir un turno (solo es un valor por defecto en el formulario).
+  fondoCajaSugerido Float @default(0)
 }

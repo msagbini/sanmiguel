@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
+import { Download } from "lucide-react";
 import { api } from "../api";
 import type { ResumenReporte, TopProducto } from "../types";
+import { descargarCSV } from "../csv";
 
 const formatoMoneda = new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 });
 
@@ -76,7 +78,7 @@ export function Reportes() {
                 <span className="w-24 shrink-0 text-stone-500">{d.fecha}</span>
                 <div className="h-4 flex-1 rounded bg-stone-100">
                   <div
-                    className="h-4 rounded bg-orange-700"
+                    className="h-4 rounded bg-brand-700"
                     style={{ width: `${(d.total / maxDia) * 100}%` }}
                   />
                 </div>
@@ -88,7 +90,20 @@ export function Reportes() {
         </div>
 
         <div className="rounded-lg border border-stone-200 bg-white p-4">
-          <h2 className="mb-3 font-bold text-stone-800">Productos más vendidos</h2>
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="font-bold text-stone-800">Productos más vendidos</h2>
+            <button
+              onClick={() =>
+                descargarCSV(
+                  `productos-mas-vendidos-${desde}-a-${hasta}.csv`,
+                  top.map((t) => ({ producto: t.nombre, cantidad: t.cantidad, total: t.total.toFixed(0) }))
+                )
+              }
+              className="flex items-center gap-1 text-xs font-semibold text-stone-500 hover:text-stone-700"
+            >
+              <Download size={13} /> CSV
+            </button>
+          </div>
           <table className="w-full text-sm">
             <thead className="text-left text-xs uppercase text-stone-500">
               <tr>

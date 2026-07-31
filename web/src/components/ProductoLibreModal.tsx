@@ -90,7 +90,7 @@ export function ProductoLibreModal({
           <button
             onClick={guardar}
             disabled={!nombre.trim() || !precio}
-            className="flex-1 rounded-lg bg-orange-800 py-2.5 font-semibold text-white hover:bg-orange-900 disabled:opacity-50"
+            className="flex-1 rounded-lg btn-primary py-2.5 disabled:opacity-50"
           >
             Agregar al carrito
           </button>

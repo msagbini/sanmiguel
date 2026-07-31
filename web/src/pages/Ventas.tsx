@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
+import { Download } from "lucide-react";
 import { api, ApiError } from "../api";
 import { useAuth } from "../AuthContext";
 import { useToast } from "../Toast";
 import type { Configuracion, Venta } from "../types";
 import { Recibo } from "../components/Recibo";
+import { descargarCSV } from "../csv";
 
 const formatoMoneda = new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 });
 
@@ -68,9 +70,33 @@ export function Ventas() {
     }
   }
 
+  function exportar() {
+    descargarCSV(
+      `ventas-${new Date().toISOString().slice(0, 10)}.csv`,
+      ventas.map((v) => ({
+        numero: `${v.prefijo}-${v.numero}`,
+        fecha: new Date(v.createdAt).toLocaleString("es-CO"),
+        cliente: v.cliente?.nombre ?? "Consumidor Final",
+        cajero: v.usuario?.nombre ?? "",
+        formaPago: v.metodoPago,
+        documento: v.tipoDocumento === "FACTURA_ELECTRONICA" ? "Factura DIAN" : "Documento POS",
+        subtotal: v.subtotal.toFixed(0),
+        descuento: v.descuento.toFixed(0),
+        iva: v.ivaTotal.toFixed(0),
+        total: v.total.toFixed(0),
+        estado: v.estado,
+      }))
+    );
+  }
+
   return (
     <div className="p-4">
-      <h1 className="mb-4 text-xl font-bold text-stone-800">Ventas</h1>
+      <div className="mb-4 flex items-center justify-between">
+        <h1 className="text-xl font-bold text-stone-800">Ventas</h1>
+        <button onClick={exportar} className="flex items-center gap-1.5 rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-sm font-semibold text-stone-600 hover:bg-stone-50">
+          <Download size={15} /> Exportar CSV
+        </button>
+      </div>
 
       <div className="overflow-x-auto rounded-lg border border-stone-200 bg-white">
         <table className="w-full text-sm">
@@ -111,7 +137,7 @@ export function Ventas() {
                   </span>
                 </td>
                 <td className="px-3 py-2">
-                  <button onClick={() => verDetalle(v.id)} className="text-xs font-semibold text-orange-800 underline">
+                  <button onClick={() => verDetalle(v.id)} className="text-xs font-semibold text-brand-700 underline">
                     Ver
                   </button>
                 </td>
@@ -151,7 +177,7 @@ export function Ventas() {
             </div>
 
             <div className="no-imprimir mt-4 flex flex-col gap-2">
-              <button onClick={() => window.print()} className="rounded-lg bg-orange-800 py-2 font-semibold text-white">
+              <button onClick={() => window.print()} className="btn-primary py-2">
                 🖨️ Imprimir
               </button>
 

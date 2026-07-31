@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { api } from "../api";
-import type { MovimientoInventario, Producto } from "../types";
+import { api, ApiError } from "../api";
+import { useToast } from "../Toast";
+import type { LoteInventario, MovimientoInventario, Producto } from "../types";
 import { UNIDAD_LABELS } from "../types";
 
 const TIPO_LABELS: Record<string, string> = {
@@ -20,27 +21,51 @@ const TIPO_COLOR: Record<string, string> = {
 };
 
 export function Inventario() {
+  const { notificar } = useToast();
   const [stockBajo, setStockBajo] = useState<Producto[]>([]);
   const [movimientos, setMovimientos] = useState<MovimientoInventario[]>([]);
+  const [lotes, setLotes] = useState<LoteInventario[]>([]);
+
+  async function cargarVencimientos() {
+    const data = await api.get<LoteInventario[]>("/lotes?dias=60");
+    setLotes(data);
+  }
 
   useEffect(() => {
     api.get<Producto[]>("/reportes/stock-bajo").then(setStockBajo);
     api.get<MovimientoInventario[]>("/productos/movimientos/recientes").then(setMovimientos);
+    cargarVencimientos();
   }, []);
+
+  async function darDeBaja(lote: LoteInventario) {
+    const motivo = prompt(`¿Por qué se da de baja "${lote.producto?.nombre}"? (vencido, dañado, etc.)`);
+    if (!motivo) return;
+    try {
+      await api.post(`/lotes/${lote.id}/dar-de-baja`, { motivo });
+      notificar("Lote dado de baja y descontado del inventario", "exito");
+      cargarVencimientos();
+      api.get<Producto[]>("/reportes/stock-bajo").then(setStockBajo);
+    } catch (err) {
+      notificar(err instanceof ApiError ? err.message : "No se pudo dar de baja el lote", "error");
+    }
+  }
+
+  const vencidos = lotes.filter((l) => l.vencido);
+  const porVencer = lotes.filter((l) => !l.vencido);
 
   return (
     <div className="grid grid-cols-1 gap-4 p-4 lg:grid-cols-2">
       <div>
-        <h2 className="mb-3 text-lg font-bold text-stone-800">
-          ⚠️ Productos con stock bajo ({stockBajo.length})
-        </h2>
+        <h2 className="mb-3 text-lg font-bold text-stone-800">⚠️ Productos con stock bajo ({stockBajo.length})</h2>
         <div className="overflow-hidden rounded-lg border border-stone-200 bg-white">
           {stockBajo.length === 0 && <p className="p-4 text-sm text-stone-400">Todo el inventario está por encima del mínimo. 🎉</p>}
           {stockBajo.map((p) => (
             <div key={p.id} className="flex items-center justify-between border-b border-stone-100 px-4 py-3 last:border-0">
               <div>
                 <p className="text-sm font-medium">{p.nombre}</p>
-                <p className="text-xs text-stone-400">Mínimo: {p.stockMinimo} {UNIDAD_LABELS[p.unidad]}</p>
+                <p className="text-xs text-stone-400">
+                  Mínimo: {p.stockMinimo} {UNIDAD_LABELS[p.unidad]}
+                </p>
               </div>
               <span className="rounded-full bg-red-100 px-3 py-1 text-sm font-bold text-red-700">
                 {p.stock} {UNIDAD_LABELS[p.unidad]}
@@ -51,8 +76,35 @@ export function Inventario() {
       </div>
 
       <div>
+        <h2 className="mb-3 text-lg font-bold text-stone-800">
+          ⏳ Vencimientos ({vencidos.length} vencidos, {porVencer.length} por vencer)
+        </h2>
+        <div className="overflow-hidden rounded-lg border border-stone-200 bg-white">
+          {lotes.length === 0 && <p className="p-4 text-sm text-stone-400">No hay lotes con vencimiento próximo registrados.</p>}
+          {[...vencidos, ...porVencer].map((lote) => (
+            <div key={lote.id} className="flex items-center justify-between gap-2 border-b border-stone-100 px-4 py-3 last:border-0">
+              <div>
+                <p className="text-sm font-medium">{lote.producto?.nombre}</p>
+                <p className={`text-xs ${lote.vencido ? "font-semibold text-red-600" : "text-amber-600"}`}>
+                  {lote.vencido ? "Venció el " : "Vence el "}
+                  {lote.fechaVencimiento && new Date(lote.fechaVencimiento).toLocaleDateString("es-CO")} · {lote.cantidadDisponible}{" "}
+                  {UNIDAD_LABELS[lote.producto?.unidad ?? "UNIDAD"]}
+                </p>
+              </div>
+              <button
+                onClick={() => darDeBaja(lote)}
+                className="shrink-0 whitespace-nowrap rounded-lg border border-red-300 px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-50"
+              >
+                Dar de baja
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="lg:col-span-2">
         <h2 className="mb-3 text-lg font-bold text-stone-800">Actividad reciente de inventario</h2>
-        <div className="max-h-[70vh] overflow-y-auto rounded-lg border border-stone-200 bg-white">
+        <div className="max-h-[50vh] overflow-y-auto rounded-lg border border-stone-200 bg-white">
           {movimientos.map((m) => (
             <div key={m.id} className="flex items-center justify-between border-b border-stone-100 px-4 py-2.5 text-sm last:border-0">
               <div>

@@ -26,14 +26,30 @@ export function Login() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-orange-900 px-4">
-      <div className="w-full max-w-sm rounded-2xl bg-white p-8 shadow-xl">
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-brand-950 px-4">
+      <div
+        className="pointer-events-none absolute inset-0 opacity-40"
+        style={{
+          background:
+            "radial-gradient(circle at 50% 0%, rgba(212,175,55,0.25), transparent 55%), radial-gradient(circle at 100% 100%, rgba(59,93,153,0.35), transparent 50%)",
+        }}
+      />
+      <div className="relative w-full max-w-sm rounded-2xl bg-white p-8 shadow-2xl">
         <div className="mb-6 text-center">
-          <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-orange-100 text-2xl font-bold text-orange-800">
-            SM
-          </div>
-          <h1 className="text-xl font-bold text-stone-900">San Miguel</h1>
-          <p className="text-sm text-stone-500">Inventario y punto de venta</p>
+          <svg viewBox="0 0 192 192" className="mx-auto mb-3 h-16 w-16" aria-hidden>
+            <rect width="192" height="192" rx="34" fill="#101f38" />
+            <path
+              d="M44 22 H148 V98 C148 139 128 167 96 182 C64 167 44 139 44 98 Z"
+              fill="none"
+              stroke="#d4af37"
+              strokeWidth="6"
+            />
+            <text x="96" y="124" fontFamily="Georgia, 'Times New Roman', serif" fontSize="86" fontWeight="bold" fill="#d4af37" textAnchor="middle">
+              M
+            </text>
+          </svg>
+          <h1 className="text-xl font-bold text-brand-900">San Miguel</h1>
+          <p className="text-sm text-stone-500">Inventario, ventas y cartera</p>
         </div>
         <form onSubmit={onSubmit} className="flex flex-col gap-4">
           <div>
@@ -44,7 +60,7 @@ export function Login() {
               autoFocus
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-lg border border-stone-300 px-3 py-2 focus:border-orange-600 focus:outline-none focus:ring-1 focus:ring-orange-600"
+              className="input"
             />
           </div>
           <div>
@@ -54,15 +70,11 @@ export function Login() {
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-lg border border-stone-300 px-3 py-2 focus:border-orange-600 focus:outline-none focus:ring-1 focus:ring-orange-600"
+              className="input"
             />
           </div>
           {error && <p className="text-sm font-medium text-red-700">{error}</p>}
-          <button
-            type="submit"
-            disabled={cargando}
-            className="mt-2 rounded-lg bg-orange-800 py-2.5 font-semibold text-white transition hover:bg-orange-900 disabled:opacity-60"
-          >
+          <button type="submit" disabled={cargando} className="btn-primary mt-2 py-2.5">
             {cargando ? "Ingresando..." : "Ingresar"}
           </button>
         </form>
