@@ -24,7 +24,7 @@ router.get("/", async (req, res) => {
 
   let productos = await prisma.producto.findMany({
     where,
-    include: { categoria: true },
+    include: { categoria: true, proveedor: true },
     orderBy: { nombre: "asc" },
   });
 
@@ -40,7 +40,7 @@ router.get("/", async (req, res) => {
 router.get("/codigo/:codigo", async (req, res) => {
   const producto = await prisma.producto.findUnique({
     where: { codigoBarras: req.params.codigo },
-    include: { categoria: true },
+    include: { categoria: true, proveedor: true },
   });
   if (!producto) return res.status(404).json({ error: "Producto no encontrado" });
   res.json(producto);
@@ -59,7 +59,7 @@ router.get("/movimientos/recientes", async (_req, res) => {
 router.get("/:id", async (req, res) => {
   const producto = await prisma.producto.findUnique({
     where: { id: Number(req.params.id) },
-    include: { categoria: true },
+    include: { categoria: true, proveedor: true },
   });
   if (!producto) return res.status(404).json({ error: "Producto no encontrado" });
   res.json(producto);
@@ -80,6 +80,7 @@ const productoSchema = z.object({
   nombre: z.string().min(1),
   descripcion: z.string().nullish(),
   categoriaId: z.number().int().nullish(),
+  proveedorId: z.number().int().nullish(),
   unidad: z.enum(UNIDADES).default("UNIDAD"),
   precioCosto: z.number().min(0).default(0),
   precioVenta: z.number().min(0),

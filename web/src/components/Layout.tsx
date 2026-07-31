@@ -111,9 +111,13 @@ function ShieldMark() {
         stroke="#d4af37"
         strokeWidth="8"
       />
-      <text x="96" y="124" fontFamily="Georgia, 'Times New Roman', serif" fontSize="86" fontWeight="bold" fill="#d4af37" textAnchor="middle">
-        M
-      </text>
+      <path d="M84,115 C55,108 40,88 44,58 C54,84 72,100 90,106 C89,109 86,112 84,115 Z" fill="#d4af37" />
+      <path d="M108,115 C137,108 152,88 148,58 C138,84 120,100 102,106 C103,109 106,112 108,115 Z" fill="#d4af37" />
+      <path d="M96,34 L89,52 L103,52 Z" fill="#d4af37" />
+      <rect x="89" y="52" width="14" height="58" fill="#d4af37" />
+      <rect x="68" y="110" width="56" height="9" fill="#d4af37" />
+      <rect x="91" y="119" width="10" height="22" fill="#d4af37" />
+      <circle cx="96" cy="147" r="7" fill="#d4af37" />
     </svg>
   );
 }

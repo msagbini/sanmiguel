@@ -85,8 +85,15 @@ export function Configuracion() {
         descripcion="Parámetros para proteger el margen (el negocio vende con margen bruto bajo) y para controlar cuánto se le puede fiar a un cliente por defecto."
       >
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <Campo label="Descuento máximo que un cajero puede aplicar sin autorización (%)">
-            <input type="number" value={config.descuentoMaximoCajeroPct} onChange={(e) => set("descuentoMaximoCajeroPct", Number(e.target.value))} className="input" />
+          <Campo label="Descuento máximo del POS, para cualquier usuario (%, máximo 3)">
+            <input
+              type="number"
+              min={0}
+              max={3}
+              value={config.descuentoMaximoPct}
+              onChange={(e) => set("descuentoMaximoPct", Math.min(3, Number(e.target.value)))}
+              className="input"
+            />
           </Campo>
           <Campo label="Alertar si el margen de una venta baja de (%)">
             <input type="number" value={config.margenAlertaPct} onChange={(e) => set("margenAlertaPct", Number(e.target.value))} className="input" />

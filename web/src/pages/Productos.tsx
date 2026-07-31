@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Download } from "lucide-react";
 import { api, ApiError } from "../api";
 import { useToast } from "../Toast";
-import type { Categoria, Producto, TipoMovimiento, Unidad } from "../types";
+import type { Categoria, Producto, Proveedor, TipoMovimiento, Unidad } from "../types";
 import { UNIDAD_LABELS } from "../types";
 import { RecepcionMercancia } from "../components/RecepcionMercancia";
 import { descargarCSV } from "../csv";
@@ -14,6 +14,7 @@ const PRODUCTO_VACIO = {
   nombre: "",
   descripcion: "",
   categoriaId: "" as number | "",
+  proveedorId: "" as number | "",
   unidad: "UNIDAD" as Unidad,
   precioCosto: "",
   precioVenta: "",
@@ -27,21 +28,26 @@ export function Productos() {
   const { notificar } = useToast();
   const [productos, setProductos] = useState<Producto[]>([]);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
+  const [proveedores, setProveedores] = useState<Proveedor[]>([]);
   const [busqueda, setBusqueda] = useState("");
   const [soloStockBajo, setSoloStockBajo] = useState(false);
   const [modalProducto, setModalProducto] = useState<Producto | "nuevo" | null>(null);
   const [form, setForm] = useState(PRODUCTO_VACIO);
   const [productoAjuste, setProductoAjuste] = useState<Producto | null>(null);
   const [nuevaCategoria, setNuevaCategoria] = useState("");
+  const [nuevoProveedorNombre, setNuevoProveedorNombre] = useState("");
+  const [nuevoProveedorTelefono, setNuevoProveedorTelefono] = useState("");
   const [recepcionAbierta, setRecepcionAbierta] = useState(false);
 
   async function cargar() {
-    const [p, c] = await Promise.all([
+    const [p, c, prov] = await Promise.all([
       api.get<Producto[]>("/productos?soloActivos=false"),
       api.get<Categoria[]>("/categorias"),
+      api.get<Proveedor[]>("/proveedores"),
     ]);
     setProductos(p);
     setCategorias(c);
+    setProveedores(prov);
   }
 
   useEffect(() => {
@@ -66,6 +72,7 @@ export function Productos() {
         nombre: p.nombre,
         descripcion: p.descripcion ?? "",
         categoriaId: p.categoriaId ?? "",
+        proveedorId: p.proveedorId ?? "",
         unidad: p.unidad,
         precioCosto: String(p.precioCosto),
         precioVenta: String(p.precioVenta),
@@ -84,6 +91,7 @@ export function Productos() {
       nombre: form.nombre.trim(),
       descripcion: form.descripcion.trim() || null,
       categoriaId: form.categoriaId === "" ? null : Number(form.categoriaId),
+      proveedorId: form.proveedorId === "" ? null : Number(form.proveedorId),
       unidad: form.unidad,
       precioCosto: Number(form.precioCosto) || 0,
       precioVenta: Number(form.precioVenta),
@@ -130,6 +138,22 @@ export function Productos() {
     }
   }
 
+  async function crearProveedor() {
+    if (!nuevoProveedorNombre.trim()) return;
+    try {
+      const prov = await api.post<Proveedor>("/proveedores", {
+        nombre: nuevoProveedorNombre.trim(),
+        telefono: nuevoProveedorTelefono.trim() || null,
+      });
+      setProveedores((prev) => [...prev, prov].sort((a, b) => a.nombre.localeCompare(b.nombre)));
+      setForm((f) => ({ ...f, proveedorId: prov.id }));
+      setNuevoProveedorNombre("");
+      setNuevoProveedorTelefono("");
+    } catch (err) {
+      notificar(err instanceof ApiError ? err.message : "No se pudo crear el proveedor", "error");
+    }
+  }
+
   return (
     <div className="p-4">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -143,6 +167,8 @@ export function Productos() {
                   nombre: p.nombre,
                   codigoBarras: p.codigoBarras ?? "",
                   categoria: p.categoria?.nombre ?? "",
+                  proveedor: p.proveedor?.nombre ?? "",
+                  telefonoProveedor: p.proveedor?.telefono ?? "",
                   unidad: UNIDAD_LABELS[p.unidad],
                   precioCosto: p.precioCosto,
                   precioVenta: p.precioVenta,
@@ -189,6 +215,7 @@ export function Productos() {
               <th className="px-3 py-2">Producto</th>
               <th className="px-3 py-2">Código</th>
               <th className="px-3 py-2">Categoría</th>
+              <th className="px-3 py-2">Proveedor</th>
               <th className="px-3 py-2">Costo</th>
               <th className="px-3 py-2">Venta</th>
               <th className="px-3 py-2">IVA</th>
@@ -202,6 +229,16 @@ export function Productos() {
                 <td className="px-3 py-2 font-medium">{p.nombre}</td>
                 <td className="px-3 py-2 text-stone-500">{p.codigoBarras ?? "-"}</td>
                 <td className="px-3 py-2 text-stone-500">{p.categoria?.nombre ?? "-"}</td>
+                <td className="px-3 py-2 text-stone-500">
+                  {p.proveedor ? (
+                    <>
+                      <p>{p.proveedor.nombre}</p>
+                      {p.proveedor.telefono && <p className="text-xs text-stone-400">{p.proveedor.telefono}</p>}
+                    </>
+                  ) : (
+                    "-"
+                  )}
+                </td>
                 <td className="px-3 py-2">{formatoMoneda.format(p.precioCosto)}</td>
                 <td className="px-3 py-2">
                   <p className="font-semibold">{formatoMoneda.format(p.precioVenta)}</p>
@@ -235,7 +272,7 @@ export function Productos() {
             ))}
             {filtrados.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-3 py-8 text-center text-stone-400">
+                <td colSpan={9} className="px-3 py-8 text-center text-stone-400">
                   Sin resultados
                 </td>
               </tr>
@@ -293,6 +330,41 @@ export function Productos() {
                     className="w-full rounded-lg border border-stone-300 px-2 py-1 text-xs"
                   />
                   <button onClick={crearCategoria} type="button" className="whitespace-nowrap text-xs font-semibold text-brand-700 underline">
+                    + Crear
+                  </button>
+                </div>
+              </label>
+              <label className="col-span-2 text-sm">
+                Proveedor (a quién se le compra)
+                <div className="mt-1 flex gap-2">
+                  <select
+                    value={form.proveedorId}
+                    onChange={(e) => setForm((f) => ({ ...f, proveedorId: e.target.value ? Number(e.target.value) : "" }))}
+                    className="w-full rounded-lg border border-stone-300 px-3 py-2"
+                  >
+                    <option value="">Sin proveedor</option>
+                    {proveedores.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.nombre}
+                        {p.telefono ? ` (${p.telefono})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="mt-1 flex gap-2">
+                  <input
+                    value={nuevoProveedorNombre}
+                    onChange={(e) => setNuevoProveedorNombre(e.target.value)}
+                    placeholder="Nombre del proveedor nuevo..."
+                    className="w-full rounded-lg border border-stone-300 px-2 py-1 text-xs"
+                  />
+                  <input
+                    value={nuevoProveedorTelefono}
+                    onChange={(e) => setNuevoProveedorTelefono(e.target.value)}
+                    placeholder="Teléfono (opcional)"
+                    className="w-32 rounded-lg border border-stone-300 px-2 py-1 text-xs"
+                  />
+                  <button onClick={crearProveedor} type="button" className="whitespace-nowrap text-xs font-semibold text-brand-700 underline">
                     + Crear
                   </button>
                 </div>

@@ -142,13 +142,16 @@ router.post("/", async (req, res) => {
 
   const config = await prisma.configuracion.upsert({ where: { id: 1 }, update: {}, create: {} });
 
-  // Protección de margen: un cajero no puede regalar más descuento del
-  // tope configurado sin que un administrador lo autorice desde su propia sesión.
-  if (req.user!.rol === "CAJERO" && brutoSinDescuento > 0) {
+  // Protección de margen: el tope de descuento aplica a CUALQUIER rol,
+  // incluido ADMIN. El POS solo ofrece botones fijos de 1/2/3% (sin campo de
+  // texto libre) precisamente para que nadie pueda regalar más margen del
+  // que el negocio puede permitirse; esta validación es la que de verdad lo
+  // hace cumplir, no solo la interfaz.
+  if (brutoSinDescuento > 0) {
     const descuentoPct = (descuentoTotal / brutoSinDescuento) * 100;
-    if (descuentoPct > config.descuentoMaximoCajeroPct) {
+    if (descuentoPct > config.descuentoMaximoPct) {
       return res.status(403).json({
-        error: `El descuento (${descuentoPct.toFixed(1)}%) supera el máximo permitido para cajeros (${config.descuentoMaximoCajeroPct}%). Pide a un administrador que lo aplique.`,
+        error: `El descuento (${descuentoPct.toFixed(1)}%) supera el máximo permitido (${config.descuentoMaximoPct}%).`,
       });
     }
   }

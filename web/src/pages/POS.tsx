@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, ApiError } from "../api";
-import { useAuth } from "../AuthContext";
 import type { Categoria, Cliente, Configuracion, MetodoPago, Producto, TopProducto, Venta } from "../types";
 import { useBarcodeScanner } from "../hooks/useBarcodeScanner";
 import { useToast } from "../Toast";
@@ -34,15 +33,14 @@ function precioSugerido(producto: Producto, cliente: Cliente | null): number {
   return producto.precioVenta;
 }
 
-// Con un margen bruto típico de ~10%, un descuento "rápido" de 5% o 10% se
-// come la mitad o toda la ganancia de la venta. Los botones de acceso
-// directo se quedan cortos a propósito (1-3%); cualquier cosa más grande
-// hay que escribirla a mano en "Otro %" y pasa por el aviso de margen/pérdida.
+// Con un margen bruto típico de ~10%, un descuento de 5% o 10% se come la
+// mitad o toda la ganancia de la venta. Por eso el descuento del POS NO se
+// puede escribir a mano: solo existen estos tres botones fijos (1/2/3%), sin
+// excepción de rol — ver la validación en el backend (routes/ventas.ts).
 const DESCUENTOS_RAPIDOS = [1, 2, 3];
 
 export function POS() {
   const { notificar } = useToast();
-  const { usuario } = useAuth();
   const [productos, setProductos] = useState<Producto[]>([]);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [categoriaId, setCategoriaId] = useState<number | null>(null);
@@ -53,7 +51,6 @@ export function POS() {
   const [metodoPago, setMetodoPago] = useState<MetodoPago>("EFECTIVO");
   const [efectivoRecibido, setEfectivoRecibido] = useState<string>("");
   const [descuentoGlobalPct, setDescuentoGlobalPct] = useState(0);
-  const [descuentoCustom, setDescuentoCustom] = useState("");
   const [modalLibreAbierto, setModalLibreAbierto] = useState(false);
   const [pantallaCobroAbierta, setPantallaCobroAbierta] = useState(false);
   const [confirmarPerdidaAbierta, setConfirmarPerdidaAbierta] = useState(false);
@@ -203,9 +200,8 @@ export function POS() {
     setCarrito((prev) => prev.filter((item) => item.key !== key));
   }
 
-  const capDescuentoCajero = config?.descuentoMaximoCajeroPct ?? 5;
-  const esAdmin = usuario?.rol === "ADMIN";
-  const descuentoSuperaTope = !esAdmin && descuentoGlobalPct > capDescuentoCajero;
+  // Tope global de descuento del POS (aplica a cualquier rol, ver Configuración).
+  const capDescuentoMax = Math.min(3, config?.descuentoMaximoPct ?? 3);
 
   const itemsCalculados = useMemo(() => {
     return carrito.map((item) => {
@@ -499,7 +495,7 @@ export function POS() {
 
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
           <span className="text-xs font-medium text-stone-500">Descuento:</span>
-          {DESCUENTOS_RAPIDOS.filter((p) => esAdmin || p <= capDescuentoCajero).map((p) => (
+          {DESCUENTOS_RAPIDOS.filter((p) => p <= capDescuentoMax).map((p) => (
             <button
               key={p}
               onClick={() => setDescuentoGlobalPct(descuentoGlobalPct === p ? 0 : p)}
@@ -510,22 +506,7 @@ export function POS() {
               {p}%
             </button>
           ))}
-          <input
-            type="number"
-            placeholder="Otro %"
-            value={descuentoCustom}
-            onChange={(e) => {
-              setDescuentoCustom(e.target.value);
-              setDescuentoGlobalPct(Number(e.target.value) || 0);
-            }}
-            className="w-16 rounded border border-stone-200 px-1.5 py-0.5 text-xs"
-          />
         </div>
-        {descuentoSuperaTope && (
-          <p className="mt-1 text-xs font-semibold text-red-600">
-            Supera el {capDescuentoCajero}% que puede autorizar un cajero. Un administrador debe aplicarlo.
-          </p>
-        )}
 
         <div className="mt-2 border-t border-stone-200 pt-2 text-sm">
           <div className="flex justify-between text-stone-500">

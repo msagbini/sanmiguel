@@ -2,6 +2,11 @@
   <rect width="512" height="512" rx="90" fill="#101f38"/>
   <path d="M118 58 H394 V262 C394 372 341 445 256 486 C171 445 118 372 118 262 Z"
         fill="#17294a" stroke="#d4af37" stroke-width="10"/>
-  <text x="256" y="330" font-family="Georgia, 'Times New Roman', serif" font-size="230"
-        font-weight="bold" fill="#d4af37" text-anchor="middle">M</text>
+  <path d="M224,307 C147,288 107,235 117,155 C144,224 192,267 240,283 C237,291 229,299 224,307 Z" fill="#d4af37"/>
+  <path d="M288,307 C365,288 405,235 395,155 C368,224 320,267 272,283 C275,291 283,299 288,307 Z" fill="#d4af37"/>
+  <path d="M256,91 L237,139 L275,139 Z" fill="#d4af37"/>
+  <rect x="237" y="139" width="37" height="155" fill="#d4af37"/>
+  <rect x="181" y="293" width="149" height="24" fill="#d4af37"/>
+  <rect x="243" y="317" width="27" height="59" fill="#d4af37"/>
+  <circle cx="256" cy="392" r="19" fill="#d4af37"/>
 </svg>

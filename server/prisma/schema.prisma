@@ -33,6 +33,19 @@ model Categoria {
   productos Producto[]
 }
 
+// Proveedor del que se compra un producto. Se reutiliza entre productos (no
+// se repite nombre/teléfono a mano en cada uno), pensado para saber a quién
+// llamar cuando algo se agota o llegó dañado.
+model Proveedor {
+  id        Int        @id @default(autoincrement())
+  nombre    String     @unique
+  telefono  String?
+  direccion String?
+  notas     String?
+  createdAt DateTime   @default(now())
+  productos Producto[]
+}
+
 model Producto {
   id              Int        @id @default(autoincrement())
   codigoBarras    String?    @unique
@@ -40,6 +53,8 @@ model Producto {
   descripcion     String?
   categoriaId     Int?
   categoria       Categoria? @relation(fields: [categoriaId], references: [id])
+  proveedorId     Int?
+  proveedor       Proveedor? @relation(fields: [proveedorId], references: [id])
   // Unidad de venta: UNIDAD | PAQUETE | CAJA | KILOGRAMO | GRAMO | LIBRA | LITRO
   // Importante para una salsamentaria: se vende tanto por unidad suelta como por caja/paquete mayor.
   unidad          String     @default("UNIDAD")
@@ -320,11 +335,13 @@ model Configuracion {
   // Por defecto 8%: con un margen bruto típico de ~10%, avisa apenas se
   // empieza a comer la ganancia, no solo cuando ya se perdió toda.
   margenAlertaPct          Float @default(8)
-  // Tope de descuento que un CAJERO puede aplicar sin ser ADMIN (en %).
-  // Por defecto 3%: con ~10% de margen bruto, un 3% de descuento ya se come
-  // casi un tercio de la ganancia de esa venta — más que eso lo debe
-  // autorizar un administrador a propósito, no un botón de acceso rápido.
-  descuentoMaximoCajeroPct Float @default(3)
+  // Tope de descuento aplicable en el POS, para CUALQUIER rol (incluido
+  // ADMIN). Por defecto 3%: con ~10% de margen bruto, un 3% de descuento ya
+  // se come casi un tercio de la ganancia de esa venta. No existe forma de
+  // escribir un porcentaje manual en el POS — solo hay botones fijos de 1/2/3%
+  // (limitados por este valor), a propósito, para que nadie pueda regalar
+  // más margen del que el negocio puede permitirse, ni por error ni de afán.
+  descuentoMaximoPct Float @default(3)
 
   // Interruptor maestro del fiado: si está apagado, "Fiado" desaparece como
   // forma de pago en el POS (las deudas ya existentes se pueden seguir

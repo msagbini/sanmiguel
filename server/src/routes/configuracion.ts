@@ -41,7 +41,9 @@ const schema = z.object({
   diasPlazoCreditoPorDefecto: z.number().int().min(1).optional(),
   diasParaVencido: z.number().int().min(1).optional(),
   margenAlertaPct: z.number().min(0).optional(),
-  descuentoMaximoCajeroPct: z.number().min(0).max(100).optional(),
+  // Tope global de descuento del POS (1/2/3%, ver ventas.ts): no tiene
+  // sentido permitir configurarlo por encima del máximo fijo del carrito.
+  descuentoMaximoPct: z.number().min(0).max(3).optional(),
   habilitarFiado: z.boolean().optional(),
   diasAlertaVencimiento: z.number().int().min(1).optional(),
   proveedorDatafono: z.enum(PROVEEDORES_DATAFONO).optional(),

@@ -26,6 +26,15 @@ export interface Categoria {
   _count?: { productos: number };
 }
 
+export interface Proveedor {
+  id: number;
+  nombre: string;
+  telefono: string | null;
+  direccion: string | null;
+  notas: string | null;
+  _count?: { productos: number };
+}
+
 export interface Producto {
   id: number;
   codigoBarras: string | null;
@@ -33,6 +42,8 @@ export interface Producto {
   descripcion: string | null;
   categoriaId: number | null;
   categoria: Categoria | null;
+  proveedorId: number | null;
+  proveedor: Proveedor | null;
   unidad: Unidad;
   precioCosto: number;
   precioVenta: number;
@@ -242,7 +253,7 @@ export interface Configuracion {
   diasPlazoCreditoPorDefecto: number;
   diasParaVencido: number;
   margenAlertaPct: number;
-  descuentoMaximoCajeroPct: number;
+  descuentoMaximoPct: number;
   habilitarFiado: boolean;
   diasAlertaVencimiento: number;
   proveedorDatafono: "NINGUNO" | "BOLD";
