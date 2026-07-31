@@ -26,7 +26,7 @@ async function main() {
     update: {},
     create: {
       id: 1,
-      nombreNegocio: "San Miguel",
+      nombreNegocio: "Surtidesechables San Miguel Arcángel",
       direccion: "Cra 43 con Calle 8, Mercado de Barranquilla",
       ciudad: "Barranquilla",
     },

@@ -48,6 +48,14 @@ export const PROVEEDORES_FACTURACION = ["NINGUNO", "FACTUS"] as const;
 
 export const PROVEEDORES_DATAFONO = ["NINGUNO", "BOLD"] as const;
 
+export const TIPOS_REFERENCIA = ["PERSONAL", "COMERCIAL"] as const;
+export type TipoReferencia = (typeof TIPOS_REFERENCIA)[number];
+
+// Estudio de crédito: mínimos exigidos antes de poder aprobar un límite de
+// fiado para un cliente (ver rutas/clientes.ts).
+export const MINIMO_CODEUDORES = 2;
+export const MINIMO_REFERENCIAS = 2;
+
 export const CONSUMIDOR_FINAL = {
   tipoDocumento: "CC" as const,
   numeroDocumento: "222222222222",

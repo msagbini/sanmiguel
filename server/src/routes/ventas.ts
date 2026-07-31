@@ -21,23 +21,25 @@ const VENTA_INCLUDE = {
 // (precio mayorista, negociado, etc.).
 const itemSchema = z
   .object({
-    productoId: z.number().int().nullish(),
-    nombreProducto: z.string().min(1).optional(),
-    cantidad: z.number().positive(),
-    precioUnitario: z.number().min(0).optional(),
-    ivaTasa: z.number().optional(),
-    costoUnitarioLibre: z.number().min(0).optional(),
-    descuento: z.number().min(0).default(0),
+    productoId: z.number().int().positive().nullish(),
+    nombreProducto: z.string().min(1).max(200).optional(),
+    cantidad: z.number().positive().finite().max(100000),
+    precioUnitario: z.number().min(0).finite().max(1_000_000_000).optional(),
+    ivaTasa: z.number().finite().optional(),
+    costoUnitarioLibre: z.number().min(0).finite().max(1_000_000_000).optional(),
+    descuento: z.number().min(0).finite().max(1_000_000_000).default(0),
   })
   .refine((item) => item.productoId != null || (item.nombreProducto && item.precioUnitario != null), {
     message: "Un producto libre necesita nombre y precio",
   });
 
 const ventaSchema = z.object({
-  clienteId: z.number().int().nullish(),
-  items: z.array(itemSchema).min(1),
+  clienteId: z.number().int().positive().nullish(),
+  // Un tope generoso para cualquier venta real (mayorista incluido); evita
+  // que un request con miles de líneas agote CPU/memoria calculando totales.
+  items: z.array(itemSchema).min(1).max(500),
   metodoPago: z.enum(METODOS_PAGO).default("EFECTIVO"),
-  efectivoRecibido: z.number().min(0).nullish(),
+  efectivoRecibido: z.number().min(0).finite().max(1_000_000_000).nullish(),
 });
 
 // Calcula base gravable e IVA asumiendo que precioUnitario ya incluye IVA
@@ -160,6 +162,11 @@ router.post("/", async (req, res) => {
     if (!cliente || cliente.esConsumidorFinal) {
       return res.status(400).json({ error: "Para fiar una venta hay que identificar al cliente" });
     }
+    if (!cliente.estudioCreditoAprobado) {
+      return res.status(400).json({
+        error: `${cliente.nombre} no tiene un estudio de crédito aprobado. Se necesitan mínimo 2 codeudores y 2 referencias verificados y aprobados por un administrador antes de poder fiarle.`,
+      });
+    }
     if (cliente.limiteCredito <= 0) {
       return res.status(400).json({ error: `${cliente.nombre} no tiene cupo de fiado habilitado` });
     }
@@ -171,70 +178,114 @@ router.post("/", async (req, res) => {
     }
   }
 
-  const ultima = await prisma.venta.findFirst({
-    where: { prefijo: "POS" },
-    orderBy: { numero: "desc" },
-  });
-  const numero = (ultima?.numero ?? 0) + 1;
-
   const turnoAbierto = await prisma.turno.findFirst({ where: { cerradoEn: null } });
 
-  const venta = await prisma.$transaction(async (tx) => {
-    const nueva = await tx.venta.create({
-      data: {
-        numero,
-        prefijo: "POS",
-        clienteId: clienteId ?? null,
-        usuarioId: req.user!.id,
-        subtotal,
-        descuento: descuentoTotal,
-        ivaTotal,
-        total,
-        metodoPago,
-        efectivoRecibido: metodoPago === "EFECTIVO" ? (efectivoRecibido ?? null) : null,
-        cambio: metodoPago === "EFECTIVO" && efectivoRecibido != null ? efectivoRecibido - total : null,
-        turnoId: turnoAbierto?.id ?? null,
-        items: { create: itemsData },
-      },
-      include: VENTA_INCLUDE,
+  let venta;
+  try {
+    venta = await prisma.$transaction(async (tx) => {
+        // Contador atómico: leer MAX(numero) antes de la transacción dejaba
+        // que dos ventas concurrentes calcularan el mismo "siguiente número"
+        // y chocaran contra la restricción única (prefijo, numero). Este
+        // `increment` es una sola operación UPDATE que SQLite serializa por
+        // sí sola, así que cada venta recibe un número distinto garantizado,
+        // sin reintentos ni colisiones posibles.
+        const contador = await tx.configuracion.update({
+          where: { id: 1 },
+          data: { ultimoNumeroVentaPos: { increment: 1 } },
+        });
+        const numero = contador.ultimoNumeroVentaPos;
+
+        const nueva = await tx.venta.create({
+          data: {
+            numero,
+            prefijo: "POS",
+            clienteId: clienteId ?? null,
+            usuarioId: req.user!.id,
+            subtotal,
+            descuento: descuentoTotal,
+            ivaTotal,
+            total,
+            metodoPago,
+            efectivoRecibido: metodoPago === "EFECTIVO" ? (efectivoRecibido ?? null) : null,
+            cambio: metodoPago === "EFECTIVO" && efectivoRecibido != null ? efectivoRecibido - total : null,
+            turnoId: turnoAbierto?.id ?? null,
+            items: { create: itemsData },
+          },
+          include: VENTA_INCLUDE,
+        });
+
+        for (const item of itemsData) {
+          if (item.productoId == null) continue; // los productos libres no afectan inventario
+          // Decremento atómico con guarda: el chequeo de stock de más arriba
+          // lee ANTES de abrir la transacción, así que dos ventas
+          // concurrentes (o dos líneas del mismo producto en la misma venta)
+          // podrían pasar esa validación y sobrevender. `updateMany` con
+          // `stock: { gte }` hace que la base de datos solo aplique el
+          // descuento si en ese instante todavía alcanza, y lo confirma con
+          // `count`; si no, se aborta toda la venta.
+          const resultado = await tx.producto.updateMany({
+            where: { id: item.productoId, stock: { gte: item.cantidad } },
+            data: { stock: { decrement: item.cantidad } },
+          });
+          if (resultado.count === 0) {
+            const actual = await tx.producto.findUnique({ where: { id: item.productoId } });
+            throw new Error(
+              `STOCK_INSUFICIENTE: ${actual?.nombre ?? "producto"} ya no tiene stock suficiente (disponible: ${actual?.stock ?? 0})`,
+            );
+          }
+          await tx.movimientoInventario.create({
+            data: {
+              productoId: item.productoId,
+              tipo: "VENTA",
+              cantidad: item.cantidad,
+              usuarioId: req.user!.id,
+              ventaId: nueva.id,
+            },
+          });
+          await consumirLotesFEFO(tx, item.productoId, item.cantidad);
+        }
+
+        if (metodoPago === "CREDITO" && cliente) {
+          // Igual que con el stock: el cupo disponible se validó leyendo
+          // ANTES de esta transacción, así que dos ventas fiadas concurrentes
+          // del mismo cliente podrían pasar esa validación y juntas superar
+          // el cupo. La guarda va en el propio UPDATE: solo se aplica el
+          // cargo si en ese instante el saldo pendiente todavía cabe dentro
+          // del cupo (limiteCredito no cambia en medio de una venta, así que
+          // usar el valor ya leído para el límite es seguro).
+          const cargo = await tx.cliente.updateMany({
+            where: { id: cliente.id, saldoPendiente: { lte: cliente.limiteCredito - total } },
+            data: { saldoPendiente: { increment: total } },
+          });
+          if (cargo.count === 0) {
+            throw new Error(`CUPO_INSUFICIENTE: ${cliente.nombre} ya no tiene cupo de fiado suficiente para esta venta`);
+          }
+          const clienteActualizado = await tx.cliente.findUniqueOrThrow({ where: { id: cliente.id } });
+          await tx.cuentaCorrienteMovimiento.create({
+            data: {
+              clienteId: cliente.id,
+              tipo: "CARGO",
+              monto: total,
+              saldoResultante: clienteActualizado.saldoPendiente,
+              ventaId: nueva.id,
+              motivo: `Venta fiada #${nueva.prefijo}-${nueva.numero}`,
+              usuarioId: req.user!.id,
+            },
+          });
+        }
+
+        return nueva;
     });
-
-    for (const item of itemsData) {
-      if (item.productoId == null) continue; // los productos libres no afectan inventario
-      await tx.producto.update({
-        where: { id: item.productoId },
-        data: { stock: { decrement: item.cantidad } },
-      });
-      await tx.movimientoInventario.create({
-        data: {
-          productoId: item.productoId,
-          tipo: "VENTA",
-          cantidad: item.cantidad,
-          usuarioId: req.user!.id,
-          ventaId: nueva.id,
-        },
-      });
-      await consumirLotesFEFO(tx, item.productoId, item.cantidad);
+  } catch (err) {
+    const mensaje = err instanceof Error ? err.message : "";
+    if (mensaje.startsWith("STOCK_INSUFICIENTE:")) {
+      return res.status(409).json({ error: mensaje.replace("STOCK_INSUFICIENTE: ", "") });
     }
-
-    if (metodoPago === "CREDITO" && cliente) {
-      const nuevoSaldo = cliente.saldoPendiente + total;
-      await tx.cliente.update({ where: { id: cliente.id }, data: { saldoPendiente: nuevoSaldo } });
-      await tx.cuentaCorrienteMovimiento.create({
-        data: {
-          clienteId: cliente.id,
-          tipo: "CARGO",
-          monto: total,
-          saldoResultante: nuevoSaldo,
-          ventaId: nueva.id,
-          motivo: `Venta fiada #${nueva.prefijo}-${nueva.numero}`,
-          usuarioId: req.user!.id,
-        },
-      });
+    if (mensaje.startsWith("CUPO_INSUFICIENTE:")) {
+      return res.status(409).json({ error: mensaje.replace("CUPO_INSUFICIENTE: ", "") });
     }
-
-    return nueva;
-  });
+    throw err;
+  }
 
   const resultado = await intentarFacturar(venta.id);
   res.status(201).json(resultado);
@@ -306,11 +357,18 @@ router.post("/:id/anular", requireRole("ADMIN"), async (req, res) => {
   if (!venta) return res.status(404).json({ error: "Venta no encontrada" });
   if (venta.estado === "ANULADA") return res.status(400).json({ error: "La venta ya estaba anulada" });
 
-  await prisma.$transaction(async (tx) => {
-    await tx.venta.update({
-      where: { id },
+  try {
+    await prisma.$transaction(async (tx) => {
+    // Guarda contra doble anulación concurrente (doble clic, o dos pestañas):
+    // sin esto, dos solicitudes simultáneas podrían pasar el chequeo de
+    // arriba y devolver el stock/saldo dos veces por la misma venta.
+    const actualizacion = await tx.venta.updateMany({
+      where: { id, estado: { not: "ANULADA" } },
       data: { estado: "ANULADA", motivoAnulacion: parsed.data.motivo },
     });
+    if (actualizacion.count === 0) {
+      throw new Error("La venta ya estaba anulada");
+    }
 
     for (const item of venta.items) {
       if (item.productoId == null) continue;
@@ -330,24 +388,33 @@ router.post("/:id/anular", requireRole("ADMIN"), async (req, res) => {
       });
     }
 
-    // Si era una venta fiada, se reversa la deuda que había generado en la cuenta del cliente.
+    // Si era una venta fiada, se reversa la deuda que había generado en la
+    // cuenta del cliente. Decremento atómico (no lectura+escritura) para no
+    // pisar un abono o cargo concurrente sobre el mismo cliente.
     if (venta.metodoPago === "CREDITO" && venta.clienteId) {
-      const cliente = await tx.cliente.findUniqueOrThrow({ where: { id: venta.clienteId } });
-      const nuevoSaldo = cliente.saldoPendiente - venta.total;
-      await tx.cliente.update({ where: { id: cliente.id }, data: { saldoPendiente: nuevoSaldo } });
+      const clienteActualizado = await tx.cliente.update({
+        where: { id: venta.clienteId },
+        data: { saldoPendiente: { decrement: venta.total } },
+      });
       await tx.cuentaCorrienteMovimiento.create({
         data: {
-          clienteId: cliente.id,
+          clienteId: clienteActualizado.id,
           tipo: "AJUSTE",
           monto: -venta.total,
-          saldoResultante: nuevoSaldo,
+          saldoResultante: clienteActualizado.saldoPendiente,
           ventaId: venta.id,
           motivo: `Reversa por anulación de venta #${venta.prefijo}-${venta.numero}: ${parsed.data.motivo}`,
           usuarioId: req.user!.id,
         },
       });
     }
-  });
+    });
+  } catch (err) {
+    if (err instanceof Error && err.message === "La venta ya estaba anulada") {
+      return res.status(409).json({ error: err.message });
+    }
+    throw err;
+  }
 
   res.status(204).send();
 });

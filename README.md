@@ -1,6 +1,6 @@
 # San Miguel — Inventario, punto de venta y facturación
 
-App web para la salsamentaria/distribuidora San Miguel (Cra 43 con Calle 8,
+App web para **Surtidesechables San Miguel Arcángel** (Cra 43 con Calle 8,
 Mercado de Barranquilla): control de inventario, punto de venta con lectura
 de código de barras y facturación electrónica DIAN.
 
@@ -99,31 +99,84 @@ Es una arquitectura simple a propósito: todo corre en un solo computador o
 en un servidor pequeño, con una base de datos SQLite (un solo archivo, fácil
 de respaldar copiando `server/prisma/dev.db`).
 
-## Poner en marcha (desarrollo)
+## Correr la app en tu laptop (paso a paso, para probarla ya)
 
-Requisitos: Node.js 20+.
+Esto es para verla y probarla en tu propio computador, sin depender de este
+entorno. Toma unos 10 minutos la primera vez.
+
+**1. Instala Node.js** (si no lo tienes ya): entra a
+[nodejs.org](https://nodejs.org) y descarga la versión **LTS** (la
+recomendada, actualmente 20 o superior). Instálala como cualquier programa
+(siguiente, siguiente, finalizar). Para confirmar que quedó instalada, abre
+una terminal (en Windows: "cmd" o "PowerShell"; en Mac: "Terminal") y escribe:
 
 ```bash
-# Backend
-cd server
-npm install
-cp .env.example .env      # revisa/edita las variables si hace falta
-npx prisma migrate deploy # crea la base de datos
-npm run seed              # usuario admin + categorías + productos de ejemplo
-npm run dev                # http://localhost:4000
-
-# Frontend (en otra terminal)
-cd web
-npm install
-npm run dev                # http://localhost:5173 (ya tiene proxy a la API)
+node --version
 ```
 
-Usuario administrador inicial (creado por el seed):
+Si te muestra un número (ej. `v20.x.x`) ya quedó lista.
+
+**2. Descarga el proyecto.** Si tienes Git instalado:
+
+```bash
+git clone <URL-del-repositorio>
+cd sanmiguel
+git checkout claude/san-miguel-inventory-app-m0mfle
+```
+
+Si no tienes Git, descarga el proyecto como ZIP desde GitHub (botón verde
+"Code" → "Download ZIP", asegurándote de estar parado en la rama
+`claude/san-miguel-inventory-app-m0mfle`) y descomprímelo en una carpeta.
+
+**3. Prende el backend** (la parte que guarda los datos). Abre una terminal
+**dentro de la carpeta del proyecto** y escribe, una línea a la vez:
+
+```bash
+cd server
+npm install
+cp .env.example .env
+npx prisma migrate deploy
+npm run seed
+npm run dev
+```
+
+`npm install` descarga las piezas que necesita el programa (tarda un poco la
+primera vez, es normal). `npm run seed` crea el usuario administrador y unos
+productos de ejemplo. Al final debe quedar mostrando en la terminal:
+`San Miguel API escuchando en http://localhost:4000` — **deja esa terminal
+abierta y corriendo**, no la cierres.
+
+**4. Prende el frontend** (lo que ves en pantalla). Abre una **segunda
+terminal** (deja la primera corriendo) y escribe:
+
+```bash
+cd web
+npm install
+npm run dev
+```
+
+Al final va a mostrar algo como `Local: http://localhost:5173/`. Abre esa
+dirección en tu navegador (Chrome, funciona mejor).
+
+**5. Entra con el usuario administrador:**
 
 - **Email:** `sagbini1807@gmail.com`
 - **Contraseña temporal:** `SanMiguel2026`
 
-Cámbiala apenas entres, desde Configuración → Usuarios.
+Cámbiala apenas entres, desde Configuración → Usuarios — es una contraseña
+que quedó escrita en este mismo documento, así que no debe seguir siendo la
+definitiva.
+
+**Para volver a abrirla otro día:** no hay que repetir todo, solo los pasos
+3 y 4 desde `npm run dev` (sáltate `npm install`, `migrate deploy` y `seed`,
+esos son de una sola vez). Es decir: una terminal con `cd server && npm run
+dev`, otra con `cd web && npm run dev`, y entrar a `http://localhost:5173`.
+
+**Nota de seguridad:** el archivo `server/.env` trae un `JWT_SECRET` de
+ejemplo. Para probar en tu laptop está bien, pero si algún día esto corre en
+un computador con el que otras personas puedan conectarse por red/internet,
+cámbialo por uno propio largo y aleatorio antes de usarlo en serio (ver
+"Seguridad" más abajo).
 
 ## Poner en producción (el PC del mostrador o un servidor)
 
@@ -137,6 +190,69 @@ Cámbiala apenas entres, desde Configuración → Usuarios.
 3. Desde la tablet o PC del mostrador, entra a la URL del negocio y usa
    "Agregar a pantalla de inicio" / "Instalar app" del navegador para tenerla
    como una app normal.
+4. **Antes de dejarlo corriendo de verdad** (no solo para probar), define en
+   `server/.env` un `JWT_SECRET` propio, largo y aleatorio (no el de
+   ejemplo), y pon `NODE_ENV=production` — el servidor directamente se
+   niega a arrancar en producción si no lo hiciste, para que no quede
+   protegido con un secreto que cualquiera puede adivinar. Si el frontend se
+   sirve desde una URL distinta a `localhost:5173` (un dominio propio, una IP
+   de la red local, etc.), también hay que definir `CORS_ORIGIN` con esa URL
+   exacta en `server/.env` (ver "Seguridad" más abajo) — si no, el navegador
+   bloqueará las peticiones a la API por seguridad.
+
+## Seguridad
+
+Esta app maneja plata, inventario y deudas de clientes reales, así que se
+construyó pensando en que alguien podría intentar hackearla, robarle
+mercancía o hacerle trampa al sistema — no solo en que funcione bien cuando
+todo sale como se espera. Lo que ya está en pie:
+
+- **Contraseñas nunca en texto plano**: se guardan con `bcrypt` (hash con
+  sal), ni siquiera un administrador con acceso a la base de datos puede
+  leerlas.
+- **Sesión con JWT** con expiración (12 horas): cada acción de la API exige
+  un token válido; los tokens vencidos o falsificados se rechazan.
+- **Roles reales, no solo de interfaz**: ADMIN vs CAJERO se valida en el
+  backend en cada endpoint sensible (anular ventas, aprobar estudios de
+  crédito, cambiar configuración), no solo ocultando botones en pantalla —
+  un cajero que intente llamar esas rutas directamente (sin pasar por la
+  interfaz) recibe un 403.
+- **Límite de intentos de login**: 10 intentos cada 15 minutos por IP: corta
+  de raíz los ataques de fuerza bruta de contraseñas. El resto de la API
+  también tiene un límite general (300 solicitudes/minuto) contra scripts
+  abusivos.
+- **CORS restringido**: solo el origen configurado (`localhost:5173` en
+  desarrollo) puede llamar a la API desde un navegador; cualquier otro sitio
+  queda bloqueado.
+- **Cabeceras de seguridad HTTP** (`helmet`): protección básica contra
+  ataques comunes de navegador (clickjacking, sniffing de tipo de contenido, etc.).
+- **Nada de sobreventa ni de fiar de más, ni siquiera en carrera**: el
+  descuento de stock, el consecutivo de la factura y el cargo al cupo de
+  fiado usan operaciones atómicas a nivel de base de datos (no
+  "leer-calcular-guardar"), así que dos ventas casi simultáneas — dos cajas,
+  un doble clic, un intento deliberado de aprovechar el momento exacto —
+  nunca pueden vender el mismo producto agotado dos veces, generar dos
+  facturas con el mismo número, ni fiar por encima del cupo aprobado. Esto
+  se probó a propósito con hasta 50 ventas disparadas en el mismo instante:
+  cero duplicados, cero sobreventa.
+- **El estudio de crédito no se puede saltar por atrás**: aunque alguien
+  intente asignar cupo de fiado o aprobar un estudio incompleto llamando
+  directamente a la API (sin pasar por la pantalla de Clientes), el backend
+  vuelve a validar los mínimos (2 codeudores, 2 referencias, aprobación de
+  un ADMIN) — la interfaz no es la única línea de defensa.
+- **Body de solicitudes limitado** (1 MB) y validación estricta de tipos,
+  rangos y tamaños de lista en cada endpoint (con `zod`): corta payloads
+  gigantes o números absurdos (`Infinity`, listas de miles de ítems) antes
+  de que lleguen a la lógica de negocio.
+- **JWT_SECRET obligatorio en producción**: el servidor se niega a arrancar
+  en producción si no se configuró un secreto propio y suficientemente
+  largo, en vez de arrancar igual con un valor por defecto conocido.
+
+Lo que queda como responsabilidad de quien lo opera (no algo que la app
+pueda resolver sola): usar HTTPS si el negocio queda accesible desde
+internet (no solo la red local), hacer respaldos periódicos de
+`server/prisma/dev.db`, y no compartir la contraseña del usuario
+administrador.
 
 ## Lector de código de barras
 
@@ -183,10 +299,29 @@ sigue el camino que usa la gran mayoría de tiendas pequeñas en Colombia:
   facturación después desde Ventas → Ver → "Reintentar facturación
   electrónica DIAN".
 
-Antes de activarlo de verdad con el proveedor real, vale la pena confirmar
-con un contador si el negocio ya está obligado a facturar electrónicamente
-(depende de si son responsables de IVA, ingresos anuales, régimen tributario,
-etc.) — la app no reemplaza ese consejo.
+**Surtidesechables San Miguel Arcángel SÍ está obligado a facturar
+electrónicamente ante la DIAN.** Esto ya no es una duda por resolver: es un
+requisito legal vigente, así que activar el conector con un proveedor
+tecnológico real (Factus u otro) no es opcional ni algo para "más adelante
+si da tiempo" — es el paso pendiente de mayor urgencia legal de todo este
+checklist, por encima de cualquier mejora de la app. Mientras el conector
+real no esté activo, cada venta sigue emitiendo el documento equivalente POS
+descrito arriba (que sirve para operar el día a día sin interrupciones),
+pero eso **no sustituye la obligación de facturación electrónica** — es solo
+lo que evita que el negocio se quede sin poder vender mientras se activa el
+proveedor. Por eso, apenas se tengan NIT, certificado digital y resolución de
+numeración vigente listos, hay que:
+1. Crear la cuenta con el proveedor tecnológico (Factus u otro autorizado
+   por la DIAN) y obtener las credenciales de API.
+2. Cargarlas en Configuración → Facturación electrónica DIAN y activar el
+   interruptor.
+3. Confirmar con el contador del negocio la resolución de numeración vigente
+   y los datos fiscales exactos que debe llevar cada factura — eso sí sigue
+   siendo trabajo de un contador, no de la app — pero la pregunta de "si
+   toca facturar electrónicamente" ya está resuelta: toca.
+
+Un banner en Configuración (visible para ADMIN) recuerda esto mientras el
+interruptor siga apagado, para que no se pierda de vista.
 
 ## Precios e IVA
 
@@ -202,13 +337,29 @@ verse como "efectivo en caja" pero sigue contando como venta — y si no se
 lleva un registro aparte, es imposible saber cuánto le deben al negocio en
 total y quién no ha pagado.
 
+- **Nadie tiene cupo de fiado por defecto, ni siquiera un cliente nuevo.**
+  Antes de poder ponerle un cupo mayor a $0 a un cliente, hay que completarle
+  un **estudio de crédito** desde Clientes → Editar: mínimo **2 codeudores**
+  (nombre, documento, teléfono) y **2 referencias** (personales o
+  comerciales), y un administrador tiene que aprobarlo explícitamente ahí
+  mismo. Solo después de esa aprobación se habilita el campo de cupo. Esto
+  aplica tanto en la pantalla como si alguien intentara saltárselo llamando
+  la API directamente — el backend vuelve a exigir los mismos mínimos.
+  Además de esto, quedan pendientes como trabajo legal aparte (la app no lo
+  gestiona): pagaré firmado y carta de instrucciones en físico, que se
+  pueden anotar como nota en el mismo estudio de crédito.
+- **Si se borra un codeudor o una referencia** y el cliente queda por debajo
+  del mínimo, la aprobación se revoca sola y el cupo vuelve a $0
+  automáticamente — no se puede debilitar un estudio ya aprobado sin que el
+  sistema se dé cuenta.
 - En **Clientes**, cada cliente identificado (no el "Consumidor Final"
-  genérico) puede tener un **cupo de fiado** (0 = no se le fía nada) y unos
-  **días de plazo** para pagar.
+  genérico) puede tener un **cupo de fiado** (una vez aprobado el estudio) y
+  unos **días de plazo** para pagar.
 - En el **POS**, al elegir "Fiado (crédito)" como forma de pago, la app pide
-  que haya un cliente seleccionado, valida que la venta no se pase de su
-  cupo disponible, y si todo bien, la registra: el recibo sale marcado
-  "QUEDA FIADO — PENDIENTE POR PAGAR" y la deuda del cliente sube.
+  que haya un cliente seleccionado, valida que tenga el estudio de crédito
+  aprobado y que la venta no se pase de su cupo disponible, y si todo bien,
+  la registra: el recibo sale marcado "QUEDA FIADO — PENDIENTE POR PAGAR" y
+  la deuda del cliente sube.
 - En **Cartera**, se ve cuánto debe cada cliente, hace cuántos días está
   vencida esa deuda (según su plazo configurado) y el total general por
   cobrar / vencido. Desde ahí se registra un **abono** (pago total o
@@ -303,6 +454,8 @@ server/
   src/services/invoicing.ts   Conector de facturación electrónica DIAN
   src/services/terminal.ts    Conector de datáfono
   src/services/lotes.ts       Consumo FEFO de lotes con vencimiento
+  src/middleware/auth.ts      Autenticación JWT y control de roles
+  src/middleware/rateLimit.ts Límite de intentos de login y de la API en general
 web/
   src/pages/                       Pantallas (POS, Productos, Ventas, Cartera, Inventario, Reportes...)
   src/hooks/useBarcodeScanner.ts   Captura del lector de código de barras

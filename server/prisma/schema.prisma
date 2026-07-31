@@ -20,10 +20,11 @@ model Usuario {
   activo       Boolean  @default(true)
   createdAt    DateTime @default(now())
 
-  ventas            Venta[]
-  movimientos       MovimientoInventario[]
-  movimientosCuenta CuentaCorrienteMovimiento[]
-  turnos            Turno[]
+  ventas                    Venta[]
+  movimientos               MovimientoInventario[]
+  movimientosCuenta         CuentaCorrienteMovimiento[]
+  turnos                    Turno[]
+  estudiosCreditoAprobados  Cliente[]                   @relation("EstudioCreditoAprobador")
 }
 
 model Categoria {
@@ -118,15 +119,67 @@ model Cliente {
   tipoCliente       String   @default("DETAL")
   // Cartera / fiado: cuánto se le puede fiar como máximo (0 = no se le fía),
   // cuánto debe hoy, y en cuántos días se considera vencida una venta a crédito.
+  // IMPORTANTE: limiteCredito solo puede ser mayor a 0 si estudioCreditoAprobado
+  // es true (ver rutas/clientes.ts). No es un campo que se edite libremente:
+  // requiere un estudio de crédito completo (mínimo 2 codeudores + 2 referencias)
+  // aprobado explícitamente por un ADMIN.
   limiteCredito     Float    @default(0)
   saldoPendiente    Float    @default(0)
   diasPlazoCredito  Int      @default(30)
   createdAt         DateTime @default(now())
 
+  // Estudio de crédito: obligatorio antes de poder fiarle a un cliente.
+  // Se aprueba a mano (POST /clientes/:id/estudio-credito/aprobar) solo cuando
+  // ya existen al menos 2 codeudores y 2 referencias registrados. Si luego se
+  // borra un codeudor/referencia y el cliente queda por debajo del mínimo, la
+  // aprobación se revoca automáticamente y el límite de crédito vuelve a 0.
+  estudioCreditoAprobado      Boolean   @default(false)
+  estudioCreditoAprobadoPorId Int?
+  estudioCreditoAprobadoPor   Usuario?  @relation("EstudioCreditoAprobador", fields: [estudioCreditoAprobadoPorId], references: [id])
+  estudioCreditoAprobadoEn    DateTime?
+  // Notas libres para dejar constancia de los documentos físicos/legales que
+  // respaldan el fiado (pagaré firmado, carta de instrucciones, cédulas
+  // fotocopiadas, etc.). La app no gestiona archivos, solo deja registro.
+  estudioCreditoNotas         String?
+
   ventas            Venta[]
   movimientosCuenta CuentaCorrienteMovimiento[]
+  codeudores        Codeudor[]
+  referencias       ReferenciaCliente[]
 
   @@unique([tipoDocumento, numeroDocumento])
+}
+
+// Codeudor/fiador: persona que responde legalmente si el cliente no paga su
+// fiado. El estudio de crédito exige un mínimo de 2 antes de poder aprobar
+// cualquier límite de crédito para el cliente.
+model Codeudor {
+  id              Int      @id @default(autoincrement())
+  clienteId       Int
+  cliente         Cliente  @relation(fields: [clienteId], references: [id])
+  nombre          String
+  tipoDocumento   String   @default("CC")
+  numeroDocumento String
+  telefono        String
+  direccion       String?
+  parentesco      String?
+  createdAt       DateTime @default(now())
+
+  @@index([clienteId])
+}
+
+// Referencia personal o comercial del cliente, parte del estudio de crédito.
+model ReferenciaCliente {
+  id        Int      @id @default(autoincrement())
+  clienteId Int
+  cliente   Cliente  @relation(fields: [clienteId], references: [id])
+  tipo      String   @default("PERSONAL") // PERSONAL | COMERCIAL
+  nombre    String
+  telefono  String
+  relacion  String?
+  createdAt DateTime @default(now())
+
+  @@index([clienteId])
 }
 
 // Libro de fiado: cada venta a crédito genera un CARGO, cada pago del cliente
@@ -233,7 +286,7 @@ model VentaItem {
 // Configuración global de la tienda (singleton, siempre id = 1)
 model Configuracion {
   id                               Int       @id @default(1)
-  nombreNegocio                    String    @default("San Miguel")
+  nombreNegocio                    String    @default("Surtidesechables San Miguel Arcángel")
   nit                              String?
   direccion                        String    @default("Cra 43 con Calle 8, Mercado de Barranquilla")
   telefono                         String?
@@ -292,4 +345,11 @@ model Configuracion {
 
   // Sugerencia de base de caja al abrir un turno (solo es un valor por defecto en el formulario).
   fondoCajaSugerido Float @default(0)
+
+  // Contador atómico del consecutivo de venta (prefijo "POS"). Se incrementa
+  // con `increment` dentro de la misma transacción que crea la venta, para
+  // que dos ventas concurrentes nunca puedan calcular el mismo "siguiente
+  // número" a partir de una lectura por separado (lo que sí podía pasar
+  // leyendo MAX(numero) antes de abrir la transacción).
+  ultimoNumeroVentaPos Int @default(0)
 }

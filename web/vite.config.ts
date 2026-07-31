@@ -12,9 +12,9 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg'],
       manifest: {
-        name: 'San Miguel - Inventario y Ventas',
+        name: 'Surtidesechables San Miguel Arcángel - Inventario y Ventas',
         short_name: 'San Miguel',
-        description: 'Inventario, punto de venta y facturación para Distribuidora San Miguel',
+        description: 'Inventario, punto de venta y facturación para Surtidesechables San Miguel Arcángel',
         theme_color: '#101f38',
         background_color: '#f2f4f9',
         display: 'standalone',

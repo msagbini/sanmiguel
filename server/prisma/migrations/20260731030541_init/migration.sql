@@ -80,7 +80,38 @@ CREATE TABLE "Cliente" (
     "limiteCredito" REAL NOT NULL DEFAULT 0,
     "saldoPendiente" REAL NOT NULL DEFAULT 0,
     "diasPlazoCredito" INTEGER NOT NULL DEFAULT 30,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "estudioCreditoAprobado" BOOLEAN NOT NULL DEFAULT false,
+    "estudioCreditoAprobadoPorId" INTEGER,
+    "estudioCreditoAprobadoEn" DATETIME,
+    "estudioCreditoNotas" TEXT,
+    CONSTRAINT "Cliente_estudioCreditoAprobadoPorId_fkey" FOREIGN KEY ("estudioCreditoAprobadoPorId") REFERENCES "Usuario" ("id") ON DELETE SET NULL ON UPDATE CASCADE
+);
+
+-- CreateTable
+CREATE TABLE "Codeudor" (
+    "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    "clienteId" INTEGER NOT NULL,
+    "nombre" TEXT NOT NULL,
+    "tipoDocumento" TEXT NOT NULL DEFAULT 'CC',
+    "numeroDocumento" TEXT NOT NULL,
+    "telefono" TEXT NOT NULL,
+    "direccion" TEXT,
+    "parentesco" TEXT,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "Codeudor_clienteId_fkey" FOREIGN KEY ("clienteId") REFERENCES "Cliente" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
+);
+
+-- CreateTable
+CREATE TABLE "ReferenciaCliente" (
+    "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    "clienteId" INTEGER NOT NULL,
+    "tipo" TEXT NOT NULL DEFAULT 'PERSONAL',
+    "nombre" TEXT NOT NULL,
+    "telefono" TEXT NOT NULL,
+    "relacion" TEXT,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "ReferenciaCliente_clienteId_fkey" FOREIGN KEY ("clienteId") REFERENCES "Cliente" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
 );
 
 -- CreateTable
@@ -162,7 +193,7 @@ CREATE TABLE "VentaItem" (
 -- CreateTable
 CREATE TABLE "Configuracion" (
     "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT DEFAULT 1,
-    "nombreNegocio" TEXT NOT NULL DEFAULT 'San Miguel',
+    "nombreNegocio" TEXT NOT NULL DEFAULT 'Surtidesechables San Miguel Arcángel',
     "nit" TEXT,
     "direccion" TEXT NOT NULL DEFAULT 'Cra 43 con Calle 8, Mercado de Barranquilla',
     "telefono" TEXT,
@@ -191,7 +222,8 @@ CREATE TABLE "Configuracion" (
     "datafonoApiUrl" TEXT,
     "datafonoApiKey" TEXT,
     "datafonoApiSecret" TEXT,
-    "fondoCajaSugerido" REAL NOT NULL DEFAULT 0
+    "fondoCajaSugerido" REAL NOT NULL DEFAULT 0,
+    "ultimoNumeroVentaPos" INTEGER NOT NULL DEFAULT 0
 );
 
 -- CreateIndex
@@ -220,6 +252,12 @@ CREATE INDEX "MovimientoInventario_createdAt_idx" ON "MovimientoInventario"("cre
 
 -- CreateIndex
 CREATE UNIQUE INDEX "Cliente_tipoDocumento_numeroDocumento_key" ON "Cliente"("tipoDocumento", "numeroDocumento");
+
+-- CreateIndex
+CREATE INDEX "Codeudor_clienteId_idx" ON "Codeudor"("clienteId");
+
+-- CreateIndex
+CREATE INDEX "ReferenciaCliente_clienteId_idx" ON "ReferenciaCliente"("clienteId");
 
 -- CreateIndex
 CREATE INDEX "CuentaCorrienteMovimiento_clienteId_idx" ON "CuentaCorrienteMovimiento"("clienteId");

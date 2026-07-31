@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { AlertTriangle } from "lucide-react";
 import { api, ApiError } from "../api";
 import { useToast } from "../Toast";
 import type { Configuracion as ConfiguracionType, Rol, Usuario } from "../types";
@@ -152,6 +153,19 @@ export function Configuracion() {
         titulo="Facturación electrónica DIAN"
         descripcion="Mientras esto esté apagado, las ventas se emiten como documento equivalente POS (válido para el día a día pero no es factura electrónica). Actívalo cuando tengan una cuenta con un proveedor tecnológico autorizado por la DIAN."
       >
+        {!config.facturacionElectronicaHabilitada && (
+          <div className="mb-4 flex gap-3 rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-800">
+            <AlertTriangle size={20} className="mt-0.5 shrink-0" />
+            <p>
+              <strong>El negocio está obligado por ley a facturar electrónicamente ante la DIAN.</strong>{" "}
+              Esto no es opcional ni depende del tamaño del negocio: mientras este interruptor
+              siga apagado, cada venta sale como documento equivalente POS (sirve para operar hoy
+              mismo), pero eso no reemplaza la obligación legal. Actívalo apenas tengan las
+              credenciales del proveedor tecnológico (más abajo) y confirmen con su contador la
+              resolución de numeración vigente.
+            </p>
+          </div>
+        )}
         <label className="mb-3 flex items-center gap-2 text-sm font-medium">
           <input
             type="checkbox"

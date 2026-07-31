@@ -75,6 +75,36 @@ export interface Cliente {
   limiteCredito: number;
   saldoPendiente: number;
   diasPlazoCredito: number;
+  estudioCreditoAprobado: boolean;
+  estudioCreditoAprobadoPorId: number | null;
+  estudioCreditoAprobadoEn: string | null;
+  estudioCreditoNotas: string | null;
+  codeudores?: Codeudor[];
+  referencias?: ReferenciaCliente[];
+}
+
+export type TipoReferencia = "PERSONAL" | "COMERCIAL";
+
+export interface Codeudor {
+  id: number;
+  clienteId: number;
+  nombre: string;
+  tipoDocumento: TipoDocumentoCliente;
+  numeroDocumento: string;
+  telefono: string;
+  direccion: string | null;
+  parentesco: string | null;
+  createdAt: string;
+}
+
+export interface ReferenciaCliente {
+  id: number;
+  clienteId: number;
+  tipo: TipoReferencia;
+  nombre: string;
+  telefono: string;
+  relacion: string | null;
+  createdAt: string;
 }
 
 export type MetodoPago = "EFECTIVO" | "TARJETA" | "TRANSFERENCIA" | "MIXTO" | "CREDITO";
