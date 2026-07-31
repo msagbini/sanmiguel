@@ -39,7 +39,7 @@ export function Layout() {
       <header className="no-imprimir flex items-center justify-between bg-brand-900 px-4 py-3 text-white md:hidden">
         <span className="flex items-center gap-2 text-lg font-bold">
           <ShieldMark />
-          San Miguel
+          San Miguel Arcángel
         </span>
         <div className="flex items-center gap-1">
           <AlertBell />
@@ -58,7 +58,7 @@ export function Layout() {
           <div className="flex items-center gap-2">
             <ShieldMark />
             <div>
-              <h1 className="text-lg font-bold leading-tight text-white">San Miguel</h1>
+              <h1 className="text-lg font-bold leading-tight text-white">San Miguel Arcángel</h1>
               <p className="text-[11px] text-brand-100/70">Inventario y ventas</p>
             </div>
           </div>

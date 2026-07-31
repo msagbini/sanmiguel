@@ -48,7 +48,7 @@ export function Login() {
               M
             </text>
           </svg>
-          <h1 className="text-xl font-bold text-brand-900">San Miguel</h1>
+          <h1 className="text-lg font-bold leading-tight text-brand-900">Surtidesechables San Miguel Arcángel</h1>
           <p className="text-sm text-stone-500">Inventario, ventas y cartera</p>
         </div>
         <form onSubmit={onSubmit} className="flex flex-col gap-4">
