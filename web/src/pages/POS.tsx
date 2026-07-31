@@ -34,7 +34,11 @@ function precioSugerido(producto: Producto, cliente: Cliente | null): number {
   return producto.precioVenta;
 }
 
-const DESCUENTOS_RAPIDOS = [1, 2, 3, 5, 10];
+// Con un margen bruto típico de ~10%, un descuento "rápido" de 5% o 10% se
+// come la mitad o toda la ganancia de la venta. Los botones de acceso
+// directo se quedan cortos a propósito (1-3%); cualquier cosa más grande
+// hay que escribirla a mano en "Otro %" y pasa por el aviso de margen/pérdida.
+const DESCUENTOS_RAPIDOS = [1, 2, 3];
 
 export function POS() {
   const { notificar } = useToast();
@@ -52,6 +56,7 @@ export function POS() {
   const [descuentoCustom, setDescuentoCustom] = useState("");
   const [modalLibreAbierto, setModalLibreAbierto] = useState(false);
   const [pantallaCobroAbierta, setPantallaCobroAbierta] = useState(false);
+  const [confirmarPerdidaAbierta, setConfirmarPerdidaAbierta] = useState(false);
   const [procesando, setProcesando] = useState(false);
   const [ventaCompletada, setVentaCompletada] = useState<Venta | null>(null);
   const [masVendidos, setMasVendidos] = useState<Map<number, number>>(new Map());
@@ -302,12 +307,23 @@ export function POS() {
   // Con tarjeta, primero se muestra la pantalla de cobro (el monto en grande
   // para digitarlo en el datáfono) y solo se registra la venta cuando el
   // cajero confirma que el cliente ya pagó.
-  function alHacerClicCobrar() {
+  function procederConPago() {
     if (metodoPago === "TARJETA") {
       setPantallaCobroAbierta(true);
     } else {
       cobrar();
     }
+  }
+
+  // Con el margen bruto tan ajustado del negocio, vender por debajo del
+  // costo no puede pasar sin que alguien lo confirme a propósito — ni
+  // siquiera un administrador con afán debería hacerlo sin darse cuenta.
+  function alHacerClicCobrar() {
+    if (totales.ganancia < 0) {
+      setConfirmarPerdidaAbierta(true);
+      return;
+    }
+    procederConPago();
   }
 
   // Atajos de teclado tipo POS de mostrador: F2 vuelve al campo de escaneo,
@@ -321,7 +337,8 @@ export function POS() {
         e.preventDefault();
         if (!ventaCompletada) alHacerClicCobrar();
       } else if (e.key === "Escape") {
-        if (pantallaCobroAbierta) setPantallaCobroAbierta(false);
+        if (confirmarPerdidaAbierta) setConfirmarPerdidaAbierta(false);
+        else if (pantallaCobroAbierta) setPantallaCobroAbierta(false);
         else if (modalLibreAbierto) setModalLibreAbierto(false);
       }
     }
@@ -335,6 +352,7 @@ export function POS() {
     cliente,
     efectivoRecibido,
     procesando,
+    confirmarPerdidaAbierta,
     fiadoInvalido,
     pantallaCobroAbierta,
     modalLibreAbierto,
@@ -621,6 +639,37 @@ export function POS() {
             cobrar();
           }}
         />
+      )}
+
+      {confirmarPerdidaAbierta && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-sm rounded-xl bg-white p-6 text-center">
+            <p className="text-4xl">🚨</p>
+            <h2 className="mt-2 text-lg font-bold text-red-700">Esta venta pierde plata</h2>
+            <p className="mt-2 text-sm text-stone-600">
+              Con el descuento aplicado, el negocio pierde{" "}
+              <span className="font-bold text-red-700">{formatoMoneda.format(Math.abs(totales.ganancia))}</span> en
+              esta venta (por debajo del costo). ¿Cobrar de todas formas?
+            </p>
+            <div className="mt-5 flex gap-2">
+              <button
+                onClick={() => setConfirmarPerdidaAbierta(false)}
+                className="flex-1 rounded-lg bg-stone-200 py-2.5 font-semibold hover:bg-stone-300"
+              >
+                Cancelar, ajustar
+              </button>
+              <button
+                onClick={() => {
+                  setConfirmarPerdidaAbierta(false);
+                  procederConPago();
+                }}
+                className="flex-1 rounded-lg bg-red-700 py-2.5 font-semibold text-white hover:bg-red-800"
+              >
+                Sí, cobrar así
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

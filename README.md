@@ -32,11 +32,14 @@ no solo en vender.
   que no está en el catálogo, ej. un servicio o un artículo ocasional) sin
   afectar el inventario.
 - **Protección de margen**: el carrito muestra en vivo la ganancia estimada
-  de la venta (en $ y %) y la resalta en rojo si el margen es bajo. Los
-  descuentos rápidos (1/2/3/5/10% + un valor libre) tienen un tope
-  configurable para cajeros (por defecto 5%) — pasarse de ese tope requiere
-  que un administrador aplique el descuento; el backend lo hace cumplir, no
-  es solo un aviso visual.
+  de la venta (en $ y %) y la resalta en rojo si el margen es bajo. Con un
+  margen bruto típico de ~10%, los descuentos rápidos se quedan cortos a
+  propósito (1/2/3%) y el tope para cajeros por defecto es 3% — más que eso
+  hay que escribirlo a mano y lo debe autorizar un administrador; el backend
+  lo hace cumplir, no es solo un aviso visual. Si aun así una venta queda
+  por debajo del costo (con descuento o precio editado a mano), aparece una
+  confirmación explícita antes de cobrar — para nadie, ni el administrador,
+  vende con pérdida sin darse cuenta.
 - **Cartera / fiado**: cada cliente puede tener un cupo de crédito y un
   plazo de pago. Una venta "fiada" no se cobra de inmediato: queda cargada a
   la cuenta del cliente. La pantalla de Cartera muestra cuánto debe cada

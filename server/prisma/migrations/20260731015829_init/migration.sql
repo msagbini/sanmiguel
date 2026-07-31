@@ -184,7 +184,7 @@ CREATE TABLE "Configuracion" (
     "diasPlazoCreditoPorDefecto" INTEGER NOT NULL DEFAULT 30,
     "diasParaVencido" INTEGER NOT NULL DEFAULT 30,
     "margenAlertaPct" REAL NOT NULL DEFAULT 8,
-    "descuentoMaximoCajeroPct" REAL NOT NULL DEFAULT 5,
+    "descuentoMaximoCajeroPct" REAL NOT NULL DEFAULT 3,
     "habilitarFiado" BOOLEAN NOT NULL DEFAULT true,
     "diasAlertaVencimiento" INTEGER NOT NULL DEFAULT 7,
     "proveedorDatafono" TEXT NOT NULL DEFAULT 'NINGUNO',
