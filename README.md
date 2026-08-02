@@ -293,6 +293,58 @@ internet (no solo la red local), hacer respaldos periódicos de
 `server/prisma/dev.db`, y no compartir la contraseña del usuario
 administrador.
 
+## App de Android (opcional)
+
+Además de la PWA (instalable gratis desde el navegador, ver más abajo), el
+proyecto trae listo un envoltorio nativo de Android hecho con
+[Capacitor](https://capacitorjs.com) en `web/android/`. No es una
+reescritura: es la misma app cargando la URL pública donde quede desplegado
+el backend (ver "Poner en producción → Opción B"), pero empacada como una
+app instalable de verdad, con su propio ícono y pantalla de carga (ya
+diseñados con el escudo del arcángel).
+
+**Por qué no viene ya compilada en un `.apk`:** generar el instalable final
+necesita el Android SDK y descargar paquetes de `dl.google.com`, algo que
+este entorno de desarrollo no puede hacer (la red donde corre Claude no
+tiene salida a esa dirección). Compilarlo es el único paso que falta, y se
+hace en una computadora normal con internet:
+
+1. **Actualiza la URL del backend.** Abre `web/capacitor.config.ts` y
+   cambia `URL_PRODUCCION` por la URL real donde quedó desplegado el backend
+   (Railway, Render, etc. — ver la sección de despliegue arriba). Sin esto,
+   la app no tiene de dónde cargar los datos.
+2. **Instala [Android Studio](https://developer.android.com/studio)**
+   (gratis). Al abrirlo por primera vez, te ofrece instalar el Android SDK
+   automáticamente — acepta.
+3. En una terminal, dentro de `web/`:
+   ```bash
+   npm install
+   npm run build
+   npx cap sync android
+   npx cap open android
+   ```
+   Esto abre el proyecto en Android Studio.
+4. Conecta un celular Android por USB (con "Depuración USB" activada en
+   Opciones de desarrollador) y dale al botón ▶ Run — instala y abre la app
+   directo en el celular. O, para generar un `.apk` que se pueda compartir e
+   instalar en cualquier equipo sin cable: menú **Build → Generate Signed
+   Bundle / APK**.
+5. El `.apk` que genere queda en
+   `web/android/app/build/outputs/apk/debug/app-debug.apk` (o `release/` si
+   firmaste uno de release). Ese archivo se puede mandar por WhatsApp/USB e
+   instalar en cualquier Android activando "Permitir instalar de fuentes
+   desconocidas" cuando lo pida.
+
+Si en algún momento cambia la URL del backend, hay que repetir los pasos 1 y
+3 (`cap sync`) y volver a compilar — la app no se actualiza sola como sí lo
+haría la PWA.
+
+**¿Y en iPhone?** Técnicamente Capacitor también soporta iOS, pero
+publicarla (o siquiera instalarla en un iPhone de prueba) requiere una Mac y
+una cuenta de Apple Developer (99 USD/año) — no está configurado por ahora.
+Para iPhone, la PWA (instalar desde Safari con "Agregar a inicio") sigue
+siendo la mejor opción sin ese costo.
+
 ## Lector de código de barras
 
 Cualquier pistola lectora USB sirve — se comportan como un teclado que
