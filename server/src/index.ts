@@ -3,6 +3,8 @@ import "dotenv/config";
 // controladores async de Express 4 para que un reject no capturado no cuelgue
 // la respuesta ni tumbe el proceso completo.
 import "express-async-errors";
+import path from "path";
+import fs from "fs";
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
@@ -78,6 +80,25 @@ app.use("/api/configuracion", configuracionRoutes);
 app.use("/api/lotes", lotesRoutes);
 app.use("/api/turnos", turnosRoutes);
 app.use("/api/pagos", pagosRoutes);
+
+// Cualquier ruta /api/* que no haya sido atendida por los routers de arriba
+// es un endpoint que no existe — 404 explícito en vez de caer al fallback
+// del frontend de más abajo (que serviría el HTML de la app por error).
+app.use("/api", (_req, res) => res.status(404).json({ error: "Recurso no encontrado" }));
+
+// Despliegue en un solo servicio: si existe el build del frontend (web/dist,
+// generado por `npm run build` en web/), Express lo sirve directamente. Así
+// no hace falta un servicio aparte para el frontend ni configurar CORS entre
+// dominios distintos — todo queda en el mismo origen. En desarrollo esta
+// carpeta no existe (Vite sirve el frontend por su cuenta con su propio
+// proxy a /api), así que este bloque simplemente no hace nada.
+const distFrontend = path.join(__dirname, "../../web/dist");
+if (fs.existsSync(distFrontend)) {
+  app.use(express.static(distFrontend));
+  app.get("*", (_req, res) => {
+    res.sendFile(path.join(distFrontend, "index.html"));
+  });
+}
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {

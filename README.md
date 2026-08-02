@@ -178,7 +178,11 @@ un computador con el que otras personas puedan conectarse por red/internet,
 cámbialo por uno propio largo y aleatorio antes de usarlo en serio (ver
 "Seguridad" más abajo).
 
-## Poner en producción (el PC del mostrador o un servidor)
+## Poner en producción
+
+Hay dos formas de tenerla corriendo de verdad, no solo para probar en tu laptop:
+
+### Opción A — el PC del mostrador (sin depender de internet)
 
 1. `cd server && npm install && npm run build && npx prisma migrate deploy && npm run seed`
    luego `npm start` (o mejor, con `pm2 start dist/index.js --name sanmiguel-api`
@@ -190,15 +194,50 @@ cámbialo por uno propio largo y aleatorio antes de usarlo en serio (ver
 3. Desde la tablet o PC del mostrador, entra a la URL del negocio y usa
    "Agregar a pantalla de inicio" / "Instalar app" del navegador para tenerla
    como una app normal.
-4. **Antes de dejarlo corriendo de verdad** (no solo para probar), define en
-   `server/.env` un `JWT_SECRET` propio, largo y aleatorio (no el de
-   ejemplo), y pon `NODE_ENV=production` — el servidor directamente se
-   niega a arrancar en producción si no lo hiciste, para que no quede
-   protegido con un secreto que cualquiera puede adivinar. Si el frontend se
-   sirve desde una URL distinta a `localhost:5173` (un dominio propio, una IP
-   de la red local, etc.), también hay que definir `CORS_ORIGIN` con esa URL
-   exacta en `server/.env` (ver "Seguridad" más abajo) — si no, el navegador
-   bloqueará las peticiones a la API por seguridad.
+
+### Opción B — un servicio en la nube (Railway, Render, etc.), accesible desde cualquier celular sin prender la laptop
+
+El proyecto trae un `package.json` en la raíz pensado exactamente para esto:
+el backend, una vez construido, sirve también el frontend ya compilado
+(`web/dist`) desde el mismo proceso y el mismo puerto — un solo servicio, una
+sola URL, sin configurar CORS entre dos dominios distintos.
+
+- **Build command**: `npm run build` (en la raíz del repo — instala y
+  compila `server/` y `web/` en un solo paso).
+- **Start command**: `npm start` (en la raíz — aplica las migraciones
+  pendientes y arranca el servidor, que ya sirve la app completa).
+- **Root Directory** en el panel del proveedor: la raíz del repositorio, no
+  `server/` ni `web/` por separado.
+- **Variables de entorno obligatorias**: `JWT_SECRET` (largo y aleatorio,
+  nunca el de ejemplo) y `NODE_ENV=production`. El puerto lo define
+  automáticamente la plataforma (`PORT`), no hace falta configurarlo.
+- **⚠️ Muy importante — la base de datos necesita un volumen persistente.**
+  Esta app usa SQLite (un solo archivo). La mayoría de plataformas en la nube
+  (incluida Railway) borran el disco del contenedor en cada despliegue nuevo
+  a menos que se le adjunte explícitamente un **volumen persistente**. Si no
+  se configura uno, cada vez que se vuelva a desplegar la app (o se reinicie
+  el servicio) **se pierden todas las ventas, clientes e inventario**. Pasos:
+  1. En el panel del proveedor, crea/adjunta un volumen y móntalo en una ruta
+     que persista, por ejemplo `/data`.
+  2. Define `DATABASE_URL="file:/data/dev.db?connection_limit=1"` (esa misma
+     ruta del volumen) como variable de entorno.
+  3. Con eso, las migraciones y los datos quedan guardados en el volumen y
+     sobreviven a futuros despliegues.
+- Una vez desplegado, la URL pública que te dé la plataforma funciona igual
+  desde el navegador de cualquier celular, sin necesidad de estar en la
+  misma red ni de tener la laptop prendida. Ahí también sirve "Agregar a
+  pantalla de inicio" para instalarla como app.
+
+### En cualquiera de las dos opciones
+
+**Antes de dejarlo corriendo de verdad**, define en las variables de entorno
+un `JWT_SECRET` propio, largo y aleatorio (no el de ejemplo), y
+`NODE_ENV=production` — el servidor directamente se niega a arrancar en
+producción si no lo hiciste, para que no quede protegido con un secreto que
+cualquiera puede adivinar. Si el frontend se sirve desde un dominio o IP
+distinto al backend (no aplica en la Opción B, donde comparten origen),
+también hay que definir `CORS_ORIGIN` con esa URL exacta (ver "Seguridad"
+más abajo) — si no, el navegador bloqueará las peticiones a la API.
 
 ## Seguridad
 
