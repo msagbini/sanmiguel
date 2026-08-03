@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { CreditCard, X } from "lucide-react";
+import { CheckCircle2, CreditCard, Radio, X } from "lucide-react";
 import { api } from "../api";
 import type { Configuracion } from "../types";
 
@@ -53,9 +53,9 @@ export function PantallaCobro({
           <button
             onClick={enviarADatafono}
             disabled={enviando}
-            className="rounded-lg border border-gold-500 px-4 py-2 text-sm font-semibold text-gold-400 hover:bg-brand-800 disabled:opacity-50"
+            className="flex items-center gap-1.5 rounded-lg border border-gold-500 px-4 py-2 text-sm font-semibold text-gold-400 hover:bg-brand-800 disabled:opacity-50"
           >
-            {enviando ? "Enviando..." : "📡 Enviar automáticamente al datáfono"}
+            <Radio size={14} aria-hidden /> {enviando ? "Enviando..." : "Enviar automáticamente al datáfono"}
           </button>
           {estado && (
             <p className={`max-w-xs text-center text-xs ${estado.ok ? "text-green-400" : "text-amber-300"}`}>{estado.mensaje}</p>
@@ -67,8 +67,8 @@ export function PantallaCobro({
         <button onClick={onCancelar} className="flex-1 rounded-lg bg-brand-800 py-3 font-semibold text-white hover:bg-brand-700">
           Cancelar
         </button>
-        <button onClick={onConfirmar} className="flex-1 rounded-lg bg-green-600 py-3 font-bold text-white hover:bg-green-500">
-          ✅ Ya pagó
+        <button onClick={onConfirmar} className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-green-600 py-3 font-bold text-white hover:bg-green-500">
+          <CheckCircle2 size={18} aria-hidden /> Ya pagó
         </button>
       </div>
     </div>

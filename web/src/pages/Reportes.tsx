@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { Download } from "lucide-react";
+import { Download, DollarSign, TrendingUp, Receipt, Tag } from "lucide-react";
 import { api } from "../api";
 import type { ResumenReporte, TopProducto } from "../types";
 import { descargarCSV } from "../csv";
+import { StatCard } from "../components/StatCard";
 
 const formatoMoneda = new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 });
 
@@ -62,15 +63,15 @@ export function Reportes() {
 
       {resumen && (
         <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4">
-          <TarjetaResumen etiqueta="Ventas" valor={formatoMoneda.format(resumen.totalVentas)} />
-          <TarjetaResumen etiqueta="Ganancia estimada" valor={formatoMoneda.format(resumen.ganancia)} destacado />
-          <TarjetaResumen etiqueta="No. de ventas" valor={String(resumen.numeroVentas)} />
-          <TarjetaResumen etiqueta="Ticket promedio" valor={formatoMoneda.format(resumen.ticketPromedio)} />
+          <StatCard etiqueta="Ventas" valor={formatoMoneda.format(resumen.totalVentas)} icon={DollarSign} />
+          <StatCard etiqueta="Ganancia estimada" valor={formatoMoneda.format(resumen.ganancia)} icon={TrendingUp} tono="exito" />
+          <StatCard etiqueta="No. de ventas" valor={String(resumen.numeroVentas)} icon={Receipt} />
+          <StatCard etiqueta="Ticket promedio" valor={formatoMoneda.format(resumen.ticketPromedio)} icon={Tag} />
         </div>
       )}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <div className="rounded-lg border border-stone-200 bg-white p-4">
+        <div className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm">
           <h2 className="mb-3 font-bold text-stone-800">Ventas por día</h2>
           <div className="flex flex-col gap-1.5">
             {porDia.map((d) => (
@@ -89,7 +90,7 @@ export function Reportes() {
           </div>
         </div>
 
-        <div className="rounded-lg border border-stone-200 bg-white p-4">
+        <div className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm">
           <div className="mb-3 flex items-center justify-between">
             <h2 className="font-bold text-stone-800">Productos más vendidos</h2>
             <button
@@ -131,15 +132,6 @@ export function Reportes() {
           </table>
         </div>
       </div>
-    </div>
-  );
-}
-
-function TarjetaResumen({ etiqueta, valor, destacado }: { etiqueta: string; valor: string; destacado?: boolean }) {
-  return (
-    <div className={`rounded-lg border p-4 ${destacado ? "border-green-300 bg-green-50" : "border-stone-200 bg-white"}`}>
-      <p className="text-xs font-medium uppercase text-stone-500">{etiqueta}</p>
-      <p className={`mt-1 text-xl font-bold ${destacado ? "text-green-700" : "text-stone-800"}`}>{valor}</p>
     </div>
   );
 }

@@ -48,7 +48,7 @@ export function TurnoWidget() {
       });
       notificar(
         cerrado.diferencia === 0
-          ? "Caja cerrada, cuadró exacto 🎉"
+          ? "Caja cerrada, cuadró exacto"
           : `Caja cerrada. Diferencia: ${formatoMoneda.format(cerrado.diferencia)}`,
         Math.abs(cerrado.diferencia) < 1 ? "exito" : "info"
       );

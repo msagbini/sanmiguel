@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Download } from "lucide-react";
+import { Download, PackagePlus } from "lucide-react";
 import { api, ApiError } from "../api";
 import { useToast } from "../Toast";
 import type { Categoria, Producto, Proveedor, TipoMovimiento, Unidad } from "../types";
@@ -185,9 +185,9 @@ export function Productos() {
           </button>
           <button
             onClick={() => setRecepcionAbierta(true)}
-            className="rounded-lg bg-brand-800 px-4 py-2 font-semibold text-white hover:bg-brand-700"
+            className="flex items-center gap-1.5 rounded-lg bg-brand-800 px-4 py-2 font-semibold text-white hover:bg-brand-700"
           >
-            📦 Recepción de mercancía
+            <PackagePlus size={16} aria-hidden /> Recepción de mercancía
           </button>
           <button onClick={() => abrirEdicion("nuevo")} className="rounded-lg btn-primary px-4 py-2">
             + Nuevo producto

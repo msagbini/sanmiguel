@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import { CheckCircle2, MessageCircle, Wallet, AlertTriangle, Users, X } from "lucide-react";
 import { api, ApiError } from "../api";
 import { useToast } from "../Toast";
+import { StatCard } from "../components/StatCard";
 import type { EstadoCuentaCliente, ResumenCartera } from "../types";
 
 const formatoMoneda = new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 });
@@ -74,21 +76,17 @@ export function Cartera() {
       <h1 className="mb-4 text-xl font-bold text-stone-800">Cartera (fiado)</h1>
 
       <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-3">
-        <div className="rounded-lg border border-stone-200 bg-white p-4">
-          <p className="text-xs font-medium uppercase text-stone-500">Total por cobrar</p>
-          <p className="mt-1 text-xl font-bold text-stone-800">{formatoMoneda.format(resumen.totalCartera)}</p>
-        </div>
-        <div className="rounded-lg border border-red-200 bg-red-50 p-4">
-          <p className="text-xs font-medium uppercase text-red-600">Vencido (+{resumen.diasParaVencido} días)</p>
-          <p className="mt-1 text-xl font-bold text-red-700">{formatoMoneda.format(resumen.totalVencido)}</p>
-        </div>
-        <div className="rounded-lg border border-stone-200 bg-white p-4">
-          <p className="text-xs font-medium uppercase text-stone-500">Clientes con deuda</p>
-          <p className="mt-1 text-xl font-bold text-stone-800">{resumen.numeroClientes}</p>
-        </div>
+        <StatCard etiqueta="Total por cobrar" valor={formatoMoneda.format(resumen.totalCartera)} icon={Wallet} />
+        <StatCard
+          etiqueta={`Vencido (+${resumen.diasParaVencido} días)`}
+          valor={formatoMoneda.format(resumen.totalVencido)}
+          icon={AlertTriangle}
+          tono="alerta"
+        />
+        <StatCard etiqueta="Clientes con deuda" valor={String(resumen.numeroClientes)} icon={Users} />
       </div>
 
-      <div className="overflow-x-auto rounded-lg border border-stone-200 bg-white">
+      <div className="overflow-x-auto rounded-xl border border-stone-200 bg-white shadow-sm">
         <table className="w-full text-sm">
           <thead className="bg-stone-50 text-left text-xs uppercase text-stone-500">
             <tr>
@@ -121,8 +119,9 @@ export function Cartera() {
             ))}
             {resumen.clientes.length === 0 && (
               <tr>
-                <td colSpan={4} className="px-3 py-8 text-center text-stone-400">
-                  Nadie debe nada por ahora 🎉
+                <td colSpan={4} className="px-3 py-10 text-center text-stone-400">
+                  <CheckCircle2 className="mx-auto mb-2 text-green-500" size={28} aria-hidden />
+                  Nadie debe nada por ahora
                 </td>
               </tr>
             )}
@@ -136,7 +135,7 @@ export function Cartera() {
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-lg font-bold">{cuenta.cliente.nombre}</h2>
               <button onClick={cerrar} className="text-stone-400 hover:text-stone-700">
-                ✕
+                <X size={18} aria-hidden />
               </button>
             </div>
 
@@ -160,9 +159,9 @@ export function Cartera() {
                   )}
                   target="_blank"
                   rel="noreferrer"
-                  className="mt-2 inline-block rounded-lg bg-green-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-green-700"
+                  className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-green-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-green-700"
                 >
-                  📱 Enviar recordatorio por WhatsApp
+                  <MessageCircle size={13} aria-hidden /> Enviar recordatorio por WhatsApp
                 </a>
               )}
             </div>

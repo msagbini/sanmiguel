@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
+import { CheckCircle2, Truck, Users, X } from "lucide-react";
 import { api, ApiError } from "../api";
 import { useToast } from "../Toast";
+import { StatCard } from "../components/StatCard";
 import type { EstadoCuentaProveedor, Proveedor, ResumenCuentasPorPagar } from "../types";
 
 const formatoMoneda = new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 });
@@ -88,17 +90,11 @@ export function CuentasPorPagar() {
       <h1 className="mb-4 text-xl font-bold text-stone-800">Cuentas por pagar (proveedores)</h1>
 
       <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-3">
-        <div className="rounded-lg border border-stone-200 bg-white p-4">
-          <p className="text-xs font-medium uppercase text-stone-500">Total que se debe</p>
-          <p className="mt-1 text-xl font-bold text-stone-800">{formatoMoneda.format(resumen.total)}</p>
-        </div>
-        <div className="rounded-lg border border-stone-200 bg-white p-4">
-          <p className="text-xs font-medium uppercase text-stone-500">Proveedores con deuda</p>
-          <p className="mt-1 text-xl font-bold text-stone-800">{resumen.numeroProveedores}</p>
-        </div>
+        <StatCard etiqueta="Total que se debe" valor={formatoMoneda.format(resumen.total)} icon={Truck} />
+        <StatCard etiqueta="Proveedores con deuda" valor={String(resumen.numeroProveedores)} icon={Users} />
       </div>
 
-      <div className="overflow-x-auto rounded-lg border border-stone-200 bg-white">
+      <div className="overflow-x-auto rounded-xl border border-stone-200 bg-white shadow-sm">
         <table className="w-full text-sm">
           <thead className="bg-stone-50 text-left text-xs uppercase text-stone-500">
             <tr>
@@ -121,8 +117,9 @@ export function CuentasPorPagar() {
             ))}
             {resumen.proveedores.length === 0 && (
               <tr>
-                <td colSpan={3} className="px-3 py-8 text-center text-stone-400">
-                  No se le debe nada a ningún proveedor por ahora 🎉
+                <td colSpan={3} className="px-3 py-10 text-center text-stone-400">
+                  <CheckCircle2 className="mx-auto mb-2 text-green-500" size={28} aria-hidden />
+                  No se le debe nada a ningún proveedor por ahora
                 </td>
               </tr>
             )}
@@ -153,7 +150,7 @@ export function CuentasPorPagar() {
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-lg font-bold">{cuenta.proveedor.nombre}</h2>
               <button onClick={cerrar} className="text-stone-400 hover:text-stone-700">
-                ✕
+                <X size={18} aria-hidden />
               </button>
             </div>
 

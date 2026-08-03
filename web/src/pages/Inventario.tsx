@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { CheckCircle2 } from "lucide-react";
 import { api, ApiError } from "../api";
 import { useToast } from "../Toast";
 import type { LoteInventario, MovimientoInventario, Producto } from "../types";
@@ -110,7 +111,12 @@ export function Inventario() {
       <div>
         <h2 className="mb-3 text-lg font-bold text-stone-800">⚠️ Productos con stock bajo ({stockBajo.length})</h2>
         <div className="overflow-hidden rounded-lg border border-stone-200 bg-white">
-          {stockBajo.length === 0 && <p className="p-4 text-sm text-stone-400">Todo el inventario está por encima del mínimo. 🎉</p>}
+          {stockBajo.length === 0 && (
+            <p className="flex items-center gap-2 p-4 text-sm text-stone-400">
+              <CheckCircle2 className="text-green-500" size={16} aria-hidden />
+              Todo el inventario está por encima del mínimo.
+            </p>
+          )}
           {stockBajo.map((p) => (
             <div key={p.id} className="flex items-center justify-between border-b border-stone-100 px-4 py-3 last:border-0">
               <div>

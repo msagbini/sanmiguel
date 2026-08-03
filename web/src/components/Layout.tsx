@@ -87,12 +87,17 @@ export function Layout() {
             </NavLink>
           ))}
         </div>
-        <div className="border-t border-brand-800 px-4 py-3 text-sm">
-          <p className="font-medium text-white">{usuario?.nombre}</p>
-          <p className="text-xs text-brand-100/60">{usuario?.rol === "ADMIN" ? "Administrador" : "Cajero"}</p>
-          <button onClick={logout} className="mt-2 flex items-center gap-1 text-xs font-semibold text-gold-400 hover:text-gold-300">
-            <LogOut size={13} /> Cerrar sesión
-          </button>
+        <div className="flex items-center gap-3 border-t border-brand-800 px-4 py-3 text-sm">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gold-500 text-sm font-bold text-brand-950">
+            {usuario?.nombre?.trim().charAt(0).toUpperCase() ?? "?"}
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="truncate font-medium text-white">{usuario?.nombre}</p>
+            <p className="text-xs text-brand-100/60">{usuario?.rol === "ADMIN" ? "Administrador" : "Cajero"}</p>
+            <button onClick={logout} className="mt-1 flex items-center gap-1 text-xs font-semibold text-gold-400 hover:text-gold-300">
+              <LogOut size={13} /> Cerrar sesión
+            </button>
+          </div>
         </div>
       </nav>
 
