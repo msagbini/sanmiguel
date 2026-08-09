@@ -134,7 +134,7 @@ export function Cartera() {
           <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-xl bg-white p-6">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-lg font-bold">{cuenta.cliente.nombre}</h2>
-              <button onClick={cerrar} className="text-stone-400 hover:text-stone-700">
+              <button onClick={cerrar} aria-label="Cerrar" className="text-stone-400 hover:text-stone-700">
                 <X size={18} aria-hidden />
               </button>
             </div>

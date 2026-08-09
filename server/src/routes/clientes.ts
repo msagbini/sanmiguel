@@ -66,15 +66,25 @@ router.put("/:id", async (req, res) => {
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
   const clienteId = Number(req.params.id);
 
-  if (parsed.data.limiteCredito !== undefined && parsed.data.limiteCredito > 0) {
-    const actual = await prisma.cliente.findUnique({ where: { id: clienteId } });
-    if (!actual) return res.status(404).json({ error: "Cliente no encontrado" });
-    if (!actual.estudioCreditoAprobado) {
-      return res.status(400).json({
-        error:
-          "No se puede asignar cupo de fiado sin un estudio de crédito aprobado " +
-          `(mínimo ${MINIMO_CODEUDORES} codeudores y ${MINIMO_REFERENCIAS} referencias, aprobado por un administrador).`,
-      });
+  if (parsed.data.limiteCredito !== undefined) {
+    // Cambiar el cupo de fiado es una decisión de crédito, no un dato de
+    // contacto: solo un ADMIN puede hacerlo, y solo si el estudio de crédito
+    // ya está aprobado. Sin este chequeo de rol, un CAJERO autenticado podía
+    // subir el cupo de un cliente ya aprobado a cualquier monto llamando
+    // directamente esta ruta.
+    if (req.user!.rol !== "ADMIN") {
+      return res.status(403).json({ error: "Solo un administrador puede cambiar el cupo de fiado" });
+    }
+    if (parsed.data.limiteCredito > 0) {
+      const actual = await prisma.cliente.findUnique({ where: { id: clienteId } });
+      if (!actual) return res.status(404).json({ error: "Cliente no encontrado" });
+      if (!actual.estudioCreditoAprobado) {
+        return res.status(400).json({
+          error:
+            "No se puede asignar cupo de fiado sin un estudio de crédito aprobado " +
+            `(mínimo ${MINIMO_CODEUDORES} codeudores y ${MINIMO_REFERENCIAS} referencias, aprobado por un administrador).`,
+        });
+      }
     }
   }
 

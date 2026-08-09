@@ -89,7 +89,7 @@ export function Layout() {
         </div>
         <div className="flex items-center gap-3 border-t border-brand-800 px-4 py-3 text-sm">
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gold-500 text-sm font-bold text-brand-950">
-            {usuario?.nombre?.trim().charAt(0).toUpperCase() ?? "?"}
+            {(usuario?.nombre?.trim().charAt(0) || "?").toUpperCase()}
           </span>
           <div className="min-w-0 flex-1">
             <p className="truncate font-medium text-white">{usuario?.nombre}</p>

@@ -110,6 +110,8 @@ router.post("/", async (req, res) => {
     }
   }
 
+  const cliente = clienteId ? await prisma.cliente.findUnique({ where: { id: clienteId } }) : null;
+
   let subtotal = 0;
   let ivaTotal = 0;
   let descuentoTotal = 0;
@@ -122,9 +124,22 @@ router.post("/", async (req, res) => {
     const { totalConIva, base, iva } = calcularItem(precioUnitario, item.cantidad, item.descuento, ivaTasa);
     subtotal += base;
     ivaTotal += iva;
-    descuentoTotal += item.descuento;
     total += totalConIva;
-    brutoSinDescuento += precioUnitario * item.cantidad;
+    // El tope de descuento se calcula contra el precio de LISTA del
+    // producto (mayorista si aplica al cliente), no contra el precioUnitario
+    // que mandó quien vende: si se calculara contra ese mismo precio, bajarlo
+    // a mano dejaría el "descuento" en 0% sin importar cuánto se regale.
+    if (producto) {
+      const precioLista =
+        cliente?.tipoCliente === "MAYORISTA" && producto.precioMayorista != null
+          ? producto.precioMayorista
+          : producto.precioVenta;
+      brutoSinDescuento += precioLista * item.cantidad;
+      descuentoTotal += item.descuento + Math.max(0, precioLista - precioUnitario) * item.cantidad;
+    } else {
+      brutoSinDescuento += precioUnitario * item.cantidad;
+      descuentoTotal += item.descuento;
+    }
     return {
       productoId: producto?.id ?? null,
       nombreProducto: producto?.nombre ?? item.nombreProducto!,
@@ -156,8 +171,6 @@ router.post("/", async (req, res) => {
       });
     }
   }
-
-  let cliente = clienteId ? await prisma.cliente.findUnique({ where: { id: clienteId } }) : null;
 
   if (metodoPago === "CREDITO") {
     if (!config.habilitarFiado) {
