@@ -21,7 +21,7 @@ import configuracionRoutes from "./routes/configuracion";
 import lotesRoutes from "./routes/lotes";
 import turnosRoutes from "./routes/turnos";
 import pagosRoutes from "./routes/pagos";
-
+ JWT_SECRET="<86d260a026959ae19379792af46321b5f47abe1887903570b53dc98e3e11cbc6c0643a0172356f0f3752da7416084f78acd111ca3c71eb18f6145fb3f0cdac66>"
 // El JWT_SECRET protege todas las sesiones de la app (admin y cajeros). Si no
 // se define uno propio, arrancar igual con un secreto por defecto conocido
 // públicamente sería como dejar la puerta sin llave. En producción es
