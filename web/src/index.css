@@ -1,0 +1,66 @@
+@import "tailwindcss";
+
+/*
+  Paleta "San Miguel Arcángel": azul celestial profundo (autoridad, protección,
+  el manto del arcángel) + oro (la espada/luz divina, los acentos de valor y
+  las acciones principales) + blanco (pureza, claridad). El rojo y el verde se
+  mantienen para semántica universal (peligro/éxito), no como color de marca.
+*/
+@theme {
+  --color-brand-950: #0b1526;
+  --color-brand-900: #101f38;
+  --color-brand-800: #17294a;
+  --color-brand-700: #1f3560;
+  --color-brand-600: #2a477c;
+  --color-brand-500: #3b5d99;
+  --color-brand-100: #e4e9f2;
+  --color-brand-50: #f2f4f9;
+
+  --color-gold-700: #96700f;
+  --color-gold-600: #b3861a;
+  --color-gold-500: #d4af37;
+  --color-gold-400: #e0c465;
+  --color-gold-300: #ecdb9c;
+  --color-gold-100: #faf3dd;
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  @apply bg-brand-50 text-stone-900;
+}
+
+.input {
+  @apply w-full rounded-lg border border-stone-300 px-3 py-2 focus:border-brand-600 focus:outline-none focus:ring-1 focus:ring-brand-600;
+}
+
+.btn-primary {
+  @apply rounded-lg bg-gold-500 font-semibold text-brand-950 shadow-sm transition hover:bg-gold-400 disabled:opacity-50;
+}
+
+.btn-secondary {
+  @apply rounded-lg bg-brand-800 font-semibold text-white transition hover:bg-brand-700 disabled:opacity-50;
+}
+
+/* Al imprimir (recibo/factura) solo se muestra el contenido marcado con
+   .recibo-imprimible, pensado para papel de ticket térmico 58/80mm. */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .recibo-imprimible, .recibo-imprimible * {
+    visibility: visible;
+  }
+  .recibo-imprimible {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+  }
+  .no-imprimir {
+    display: none !important;
+  }
+}

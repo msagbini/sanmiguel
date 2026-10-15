@@ -1,0 +1,444 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+
+}
+
+// NOTA: SQLite no soporta enums nativos en Prisma, por eso los "enums" de este
+// dominio (Rol, Unidad, TipoMovimiento, etc.) se modelan como String y se
+// validan en la capa de aplicación (ver src/constants.ts y los esquemas zod).
+
+model Usuario {
+  id           Int      @id @default(autoincrement())
+  nombre       String
+  email        String   @unique
+  passwordHash String
+  rol          String   @default("CAJERO") // ADMIN | CAJERO
+  activo       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  ventas                    Venta[]
+  movimientos               MovimientoInventario[]
+  movimientosCuenta         CuentaCorrienteMovimiento[]
+  turnos                    Turno[]
+  estudiosCreditoAprobados  Cliente[]                   @relation("EstudioCreditoAprobador")
+  devoluciones              Devolucion[]
+  movimientosProveedor      MovimientoCuentaProveedor[]
+}
+
+model Categoria {
+  id        Int        @id @default(autoincrement())
+  nombre    String     @unique
+  productos Producto[]
+}
+
+// Proveedor del que se compra un producto. Se reutiliza entre productos (no
+// se repite nombre/teléfono a mano en cada uno), pensado para saber a quién
+// llamar cuando algo se agota o llegó dañado. También lleva cuentas por
+// pagar: cuánto se le debe (por mercancía recibida a crédito) y los pagos
+// que se le van haciendo, como espejo de la cartera de clientes.
+model Proveedor {
+  id             Int        @id @default(autoincrement())
+  nombre         String     @unique
+  telefono       String?
+  direccion      String?
+  notas          String?
+  saldoPendiente Float      @default(0)
+  createdAt      DateTime   @default(now())
+  productos      Producto[]
+
+  movimientosCuenta MovimientoCuentaProveedor[]
+}
+
+// Cuentas por pagar: cada compra a crédito genera un CARGO, cada pago que se
+// le hace al proveedor genera un ABONO. Espejo de CuentaCorrienteMovimiento
+// pero del lado de lo que el negocio debe, no de lo que le deben.
+model MovimientoCuentaProveedor {
+  id              Int       @id @default(autoincrement())
+  proveedorId     Int
+  proveedor       Proveedor @relation(fields: [proveedorId], references: [id])
+  tipo            String // CARGO | ABONO | AJUSTE
+  monto           Float
+  saldoResultante Float
+  motivo          String?
+  usuarioId       Int
+  usuario         Usuario   @relation(fields: [usuarioId], references: [id])
+  createdAt       DateTime  @default(now())
+
+  @@index([proveedorId])
+  @@index([createdAt])
+}
+
+model Producto {
+  id              Int        @id @default(autoincrement())
+  codigoBarras    String?    @unique
+  nombre          String
+  descripcion     String?
+  categoriaId     Int?
+  categoria       Categoria? @relation(fields: [categoriaId], references: [id])
+  proveedorId     Int?
+  proveedor       Proveedor? @relation(fields: [proveedorId], references: [id])
+  // Unidad de venta: UNIDAD | PAQUETE | CAJA | KILOGRAMO | GRAMO | LIBRA | LITRO
+  // Importante para una salsamentaria: se vende tanto por unidad suelta como por caja/paquete mayor.
+  unidad          String     @default("UNIDAD")
+  precioCosto     Float      @default(0)
+  precioVenta     Float
+  // Precio especial para clientes mayoristas/tenderos que revenden el producto.
+  // Si es null, se usa precioVenta también para mayoristas.
+  precioMayorista Float?
+  // Tasa de IVA aplicable en Colombia: 0 (excluido/exento), 5 o 19.
+  // Muchos productos de una salsamentaria (alimentos de la canasta básica) están excluidos o al 5%.
+  ivaTasa         Int        @default(0)
+  stock           Float      @default(0)
+  stockMinimo     Float      @default(0)
+  activo          Boolean    @default(true)
+  imagenUrl       String?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  movimientos MovimientoInventario[]
+  ventaItems  VentaItem[]
+  lotes       LoteInventario[]
+
+  @@index([nombre])
+}
+
+// Lote/partida de inventario con su propia fecha de vencimiento. Permite que
+// un mismo producto tenga varias entradas con vencimientos distintos (lo que
+// llegó hoy vence en agosto, lo que quedaba de la semana pasada vence en
+// julio) y que las salidas consuman primero lo más próximo a vencer (FEFO).
+// Un producto que nunca recibe una fecha de vencimiento simplemente no tiene
+// lotes: su stock se maneja como antes, sin este seguimiento.
+model LoteInventario {
+  id                 Int       @id @default(autoincrement())
+  productoId         Int
+  producto           Producto  @relation(fields: [productoId], references: [id])
+  fechaVencimiento   DateTime?
+  cantidadInicial    Float
+  cantidadDisponible Float
+  costoUnitario      Float     @default(0)
+  motivo             String?
+  activo             Boolean   @default(true)
+  createdAt          DateTime  @default(now())
+
+  @@index([productoId])
+  @@index([fechaVencimiento])
+}
+
+model MovimientoInventario {
+  id            Int      @id @default(autoincrement())
+  productoId    Int
+  producto      Producto @relation(fields: [productoId], references: [id])
+  // ENTRADA (compra) | SALIDA (merma/daño) | AJUSTE (conteo físico) | VENTA (automático) | DEVOLUCION
+  tipo          String
+  cantidad      Float
+  costoUnitario Float?
+  motivo        String?
+  usuarioId     Int?
+  usuario       Usuario? @relation(fields: [usuarioId], references: [id])
+  ventaId       Int?
+  venta         Venta?   @relation(fields: [ventaId], references: [id])
+  createdAt     DateTime @default(now())
+
+  @@index([productoId])
+  @@index([createdAt])
+}
+
+model Cliente {
+  id                Int      @id @default(autoincrement())
+  tipoDocumento     String   @default("CC") // CC | NIT | CE | PASAPORTE
+  numeroDocumento   String   @default("222222222222")
+  nombre            String   @default("Consumidor Final")
+  telefono          String?
+  email             String?
+  direccion         String?
+  esConsumidorFinal Boolean  @default(true)
+  // DETAL: cliente normal. MAYORISTA: tendero/revendedor, se le ofrece precioMayorista en el POS.
+  tipoCliente       String   @default("DETAL")
+  // Cartera / fiado: cuánto se le puede fiar como máximo (0 = no se le fía),
+  // cuánto debe hoy, y en cuántos días se considera vencida una venta a crédito.
+  // IMPORTANTE: limiteCredito solo puede ser mayor a 0 si estudioCreditoAprobado
+  // es true (ver rutas/clientes.ts). No es un campo que se edite libremente:
+  // requiere un estudio de crédito completo (mínimo 2 codeudores + 2 referencias)
+  // aprobado explícitamente por un ADMIN.
+  limiteCredito     Float    @default(0)
+  saldoPendiente    Float    @default(0)
+  diasPlazoCredito  Int      @default(30)
+  createdAt         DateTime @default(now())
+
+  // Estudio de crédito: obligatorio antes de poder fiarle a un cliente.
+  // Se aprueba a mano (POST /clientes/:id/estudio-credito/aprobar) solo cuando
+  // ya existen al menos 2 codeudores y 2 referencias registrados. Si luego se
+  // borra un codeudor/referencia y el cliente queda por debajo del mínimo, la
+  // aprobación se revoca automáticamente y el límite de crédito vuelve a 0.
+  estudioCreditoAprobado      Boolean   @default(false)
+  estudioCreditoAprobadoPorId Int?
+  estudioCreditoAprobadoPor   Usuario?  @relation("EstudioCreditoAprobador", fields: [estudioCreditoAprobadoPorId], references: [id])
+  estudioCreditoAprobadoEn    DateTime?
+  // Notas libres para dejar constancia de los documentos físicos/legales que
+  // respaldan el fiado (pagaré firmado, carta de instrucciones, cédulas
+  // fotocopiadas, etc.). La app no gestiona archivos, solo deja registro.
+  estudioCreditoNotas         String?
+
+  ventas            Venta[]
+  movimientosCuenta CuentaCorrienteMovimiento[]
+  codeudores        Codeudor[]
+  referencias       ReferenciaCliente[]
+
+  @@unique([tipoDocumento, numeroDocumento])
+}
+
+// Codeudor/fiador: persona que responde legalmente si el cliente no paga su
+// fiado. El estudio de crédito exige un mínimo de 2 antes de poder aprobar
+// cualquier límite de crédito para el cliente.
+model Codeudor {
+  id              Int      @id @default(autoincrement())
+  clienteId       Int
+  cliente         Cliente  @relation(fields: [clienteId], references: [id])
+  nombre          String
+  tipoDocumento   String   @default("CC")
+  numeroDocumento String
+  telefono        String
+  direccion       String?
+  parentesco      String?
+  createdAt       DateTime @default(now())
+
+  @@index([clienteId])
+}
+
+// Referencia personal o comercial del cliente, parte del estudio de crédito.
+model ReferenciaCliente {
+  id        Int      @id @default(autoincrement())
+  clienteId Int
+  cliente   Cliente  @relation(fields: [clienteId], references: [id])
+  tipo      String   @default("PERSONAL") // PERSONAL | COMERCIAL
+  nombre    String
+  telefono  String
+  relacion  String?
+  createdAt DateTime @default(now())
+
+  @@index([clienteId])
+}
+
+// Libro de fiado: cada venta a crédito genera un CARGO, cada pago del cliente
+// genera un ABONO. El saldo de Cliente.saldoPendiente es la caché del balance;
+// esta tabla es el historial auditable (quién fio, quién recibió el abono, cuándo).
+model CuentaCorrienteMovimiento {
+  id              Int      @id @default(autoincrement())
+  clienteId       Int
+  cliente         Cliente  @relation(fields: [clienteId], references: [id])
+  tipo            String // CARGO | ABONO | AJUSTE
+  monto           Float
+  saldoResultante Float
+  ventaId         Int?
+  venta           Venta?   @relation(fields: [ventaId], references: [id])
+  metodoPago      String? // método con el que se recibió el abono (EFECTIVO, TRANSFERENCIA, etc.)
+  motivo          String?
+  usuarioId       Int
+  usuario         Usuario  @relation(fields: [usuarioId], references: [id])
+  turnoId         Int?
+  turno           Turno?   @relation(fields: [turnoId], references: [id])
+  createdAt       DateTime @default(now())
+
+  @@index([clienteId])
+  @@index([createdAt])
+}
+
+model Venta {
+  id               Int      @id @default(autoincrement())
+  numero           Int
+  prefijo          String   @default("POS")
+  clienteId        Int?
+  cliente          Cliente? @relation(fields: [clienteId], references: [id])
+  usuarioId        Int
+  usuario          Usuario  @relation(fields: [usuarioId], references: [id])
+  subtotal         Float
+  descuento        Float    @default(0)
+  ivaTotal         Float    @default(0)
+  total            Float
+  metodoPago       String   @default("EFECTIVO") // EFECTIVO | TARJETA | TRANSFERENCIA | MIXTO | CREDITO (fiado)
+  efectivoRecibido Float?
+  cambio           Float?
+  estado           String   @default("COMPLETADA") // COMPLETADA | ANULADA
+  // DOCUMENTO_POS: documento equivalente POS (válido para ventas de poco valor sin factura electrónica).
+  // FACTURA_ELECTRONICA: factura electrónica de venta ante la DIAN (requiere proveedor tecnológico habilitado).
+  tipoDocumento    String   @default("DOCUMENTO_POS")
+  // Campos que solo se llenan si se emitió factura electrónica vía proveedor DIAN
+  cufe             String?
+  urlQr            String?
+  proveedorFactura String?
+  motivoAnulacion  String?
+  turnoId          Int?
+  turno            Turno?   @relation(fields: [turnoId], references: [id])
+  createdAt        DateTime @default(now())
+
+  // Suma acumulada de lo devuelto en devoluciones parciales (ver Devolucion).
+  // El total original NUNCA se modifica (es el registro histórico de lo que
+  // se vendió); esto permite ver cuánto de esa venta sigue vigente sin
+  // perder el dato original para auditoría/reportes.
+  totalDevuelto Float @default(0)
+
+  items             VentaItem[]
+  movimientos       MovimientoInventario[]
+  movimientosCuenta CuentaCorrienteMovimiento[]
+  devoluciones      Devolucion[]
+
+  @@unique([prefijo, numero])
+  @@index([createdAt])
+}
+
+// Devolución parcial de una venta ya completada: a diferencia de anular (que
+// deshace TODA la venta), esto permite devolver solo algunos ítems/cantidades
+// (ej. el cliente devuelve 2 de los 5 que compró porque venían dañados) sin
+// tocar el resto de la venta. Restaura el stock de lo devuelto y, si la venta
+// era fiada, reduce la deuda del cliente en la parte proporcional.
+model Devolucion {
+  id        Int              @id @default(autoincrement())
+  ventaId   Int
+  venta     Venta            @relation(fields: [ventaId], references: [id])
+  monto     Float
+  motivo    String
+  usuarioId Int
+  usuario   Usuario          @relation(fields: [usuarioId], references: [id])
+  // Turno en que se hizo la devolución (no necesariamente el mismo turno en
+  // que se hizo la venta original). Sirve para saber cuánto efectivo hay que
+  // restar del arqueo de ESTE turno si se le devolvió plata en mano a alguien.
+  turnoId   Int?
+  turno     Turno?           @relation(fields: [turnoId], references: [id])
+  createdAt DateTime         @default(now())
+  items     DevolucionItem[]
+}
+
+model DevolucionItem {
+  id           Int        @id @default(autoincrement())
+  devolucionId Int
+  devolucion   Devolucion @relation(fields: [devolucionId], references: [id])
+  ventaItemId  Int
+  ventaItem    VentaItem  @relation(fields: [ventaItemId], references: [id])
+  cantidad     Float
+  monto        Float
+}
+
+// Turno de caja: se abre con una base (fondo inicial) y se cierra contando el
+// efectivo físico. La diferencia entre lo esperado (fondo + ventas en
+// efectivo) y lo contado ayuda a detectar faltantes sin tener que confiar en
+// la memoria de quién vendió qué. Pensado para un solo punto de caja: solo
+// puede haber un turno abierto a la vez.
+model Turno {
+  id               Int       @id @default(autoincrement())
+  usuarioId        Int
+  usuario          Usuario   @relation(fields: [usuarioId], references: [id])
+  fondoInicial     Float     @default(0)
+  abiertoEn        DateTime  @default(now())
+  cerradoEn        DateTime?
+  efectivoContado  Float?
+  efectivoEsperado Float?
+  diferencia       Float?
+  notas            String?
+
+  ventas            Venta[]
+  movimientosCuenta CuentaCorrienteMovimiento[]
+  devoluciones      Devolucion[]
+}
+
+model VentaItem {
+  id                 Int       @id @default(autoincrement())
+  ventaId            Int
+  venta              Venta     @relation(fields: [ventaId], references: [id])
+  // productoId es null para "productos libres": ítems agregados a mano en el
+  // momento de la venta (algo que no está en el catálogo). No descuentan
+  // inventario ni generan movimiento.
+  productoId         Int?
+  producto           Producto? @relation(fields: [productoId], references: [id])
+  nombreProducto     String
+  cantidad           Float
+  precioUnitario     Float
+  // Costo de referencia solo para productos libres (para no perder el cálculo
+  // de ganancia en los reportes). Para productos del catálogo se usa producto.precioCosto.
+  costoUnitarioLibre Float?
+  ivaTasa            Int       @default(0)
+  descuento          Float     @default(0)
+  subtotal           Float
+  // Cuánto de la cantidad original ya se devolvió (ver Devolucion). Nunca
+  // puede superar `cantidad`; se usa para no dejar devolver más de lo que
+  // realmente se vendió en esa línea.
+  cantidadDevuelta   Float     @default(0)
+
+  devolucionItems DevolucionItem[]
+}
+
+// Configuración global de la tienda (singleton, siempre id = 1)
+model Configuracion {
+  id                               Int       @id @default(1)
+  nombreNegocio                    String    @default("Surtidesechables San Miguel Arcángel")
+  nit                              String?
+  direccion                        String    @default("Cra 43 con Calle 8, Mercado de Barranquilla")
+  telefono                         String?
+  ciudad                           String    @default("Barranquilla")
+  // Resolución de numeración de facturación DIAN (Resolución de Facturación vigente)
+  resolucionDianNumero             String?
+  resolucionDianPrefijo            String?
+  resolucionDianDesde              Int?
+  resolucionDianHasta              Int?
+  resolucionDianVigenciaDesde      DateTime?
+  resolucionDianVigenciaHasta      DateTime?
+  facturacionElectronicaHabilitada Boolean   @default(false)
+  proveedorFacturacion             String    @default("NINGUNO") // NINGUNO | FACTUS
+  proveedorApiUrl                  String?
+  proveedorApiKey                  String?
+  proveedorApiSecret               String?
+  formatoRecibo                    String    @default("80MM") // 58MM | 80MM
+
+  // Identifica el tipo de negocio (uso informativo/futuras plantillas, no
+  // condiciona la lógica: la misma app sirve para salsamentaria, minimercado,
+  // ropa, calzado, etc.)
+  tipoNegocio String @default("OTRO")
+
+  // Cartera / fiado
+  limiteCreditoPorDefecto    Float @default(0)
+  diasPlazoCreditoPorDefecto Int   @default(30)
+  diasParaVencido            Int   @default(30)
+
+  // Protección de margen: por debajo de este % de ganancia sobre el costo,
+  // el POS resalta la línea/venta en la interfaz para que el cajero lo piense dos veces.
+  // Por defecto 8%: con un margen bruto típico de ~10%, avisa apenas se
+  // empieza a comer la ganancia, no solo cuando ya se perdió toda.
+  margenAlertaPct          Float @default(8)
+  // Tope de descuento aplicable en el POS, para CUALQUIER rol (incluido
+  // ADMIN). Por defecto 3%: con ~10% de margen bruto, un 3% de descuento ya
+  // se come casi un tercio de la ganancia de esa venta. No existe forma de
+  // escribir un porcentaje manual en el POS — solo hay botones fijos de 1/2/3%
+  // (limitados por este valor), a propósito, para que nadie pueda regalar
+  // más margen del que el negocio puede permitirse, ni por error ni de afán.
+  descuentoMaximoPct Float @default(3)
+
+  // Interruptor maestro del fiado: si está apagado, "Fiado" desaparece como
+  // forma de pago en el POS (las deudas ya existentes se pueden seguir
+  // cobrando desde Cartera, solo se bloquean fiados nuevos).
+  habilitarFiado Boolean @default(true)
+
+  // Vencimientos: a cuántos días de anticipación se avisa que un lote está por vencer.
+  diasAlertaVencimiento Int @default(7)
+
+  // Datáfono / pago con tarjeta: conector de referencia para enviar el monto
+  // directamente al datáfono cuando el proveedor lo permita. La "pantalla de
+  // cobro" (mostrar el monto en grande) funciona siempre, sin necesidad de
+  // configurar nada aquí.
+  proveedorDatafono String  @default("NINGUNO") // NINGUNO | BOLD
+  datafonoApiUrl    String?
+  datafonoApiKey    String?
+  datafonoApiSecret String?
+
+  // Sugerencia de base de caja al abrir un turno (solo es un valor por defecto en el formulario).
+  fondoCajaSugerido Float @default(0)
+
+  // Contador atómico del consecutivo de venta (prefijo "POS"). Se incrementa
+  // con `increment` dentro de la misma transacción que crea la venta, para
+  // que dos ventas concurrentes nunca puedan calcular el mismo "siguiente
+  // número" a partir de una lectura por separado (lo que sí podía pasar
+  // leyendo MAX(numero) antes de abrir la transacción).
+  ultimoNumeroVentaPos Int @default(0)
+}
